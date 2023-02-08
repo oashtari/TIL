@@ -1,9 +1,12 @@
-### February 8, 2023 
-- Create new project
+# February 8, 2023 
+
+## Setup
+
+### Create new project
    
     cargo new <project name> 
 
-#### Speed up linking phase 
+### Speed up linking phase 
 
 - On MacOS
 
@@ -14,7 +17,7 @@
         [target.aarch64-apple-darwin]
         rustflags = ["-C", "link-arg=-fuse-ld=/usr/local/bin/zld"]
 
-#### Reduce perceived compilation time
+### Reduce perceived compilation time
 
         cargo install cargo-watch
 
@@ -26,7 +29,7 @@
 
         cargo watch -x check -x test -x run
 
-#### Checking test coverage in your code
+### Checking test coverage in your code
 
 At the time of writing tarpaulin only supports
 x86_64 CPU architectures running Linux.
@@ -39,7 +42,7 @@ x86_64 CPU architectures running Linux.
 
 ## CI
 
-#### Linting
+### Linting
 
         rustup component add clippy
 
@@ -47,7 +50,7 @@ x86_64 CPU architectures running Linux.
 
         cargo clippy -- -D warnings
 
-#### Formatting
+### Formatting
 
         rustup component add rustfmt
 
@@ -59,7 +62,7 @@ x86_64 CPU architectures running Linux.
 
         cargo fmt -- --check
 
-#### Security vulnerabilities
+### Security vulnerabilities
 
         cargo install cargo-audit
 
@@ -68,3 +71,4 @@ x86_64 CPU architectures running Linux.
         cargo audit
 
         
+# TESTING
