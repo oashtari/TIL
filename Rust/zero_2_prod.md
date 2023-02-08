@@ -41,3 +41,5 @@ x86_64 CPU architectures running Linux.
         cargo install cargo-audit
     - once installed, run
         cargo audit
+
+        
