@@ -1,20 +1,32 @@
 ### February 8, 2023 
-- cargo new <project name> creates new projects
-#### to speed up linking phase 
-- On MacOS, `brew install michaeleisel/zld/zld`
+- Create new project
+   
+    cargo new <project name> 
+
+#### Speed up linking phase 
+
+- On MacOS
+
+        brew install michaeleisel/zld/zld
+
         [target.x86_64-apple-darwin]
         rustflags = ["-C", "link-arg=-fuse-ld=/usr/local/bin/zld"]
         [target.aarch64-apple-darwin]
         rustflags = ["-C", "link-arg=-fuse-ld=/usr/local/bin/zld"]
 
-#### reduce perceived compilation time
+#### Reduce perceived compilation time
+
         cargo install cargo-watch
-    - to run after each code change
+
+- to run after each code change
+
         cargo watch -x check
-    - to run check, then test, then run
+
+- to run check, then test, then run
+
         cargo watch -x check -x test -x run
 
-#### checking test coverage in your code
+#### Checking test coverage in your code
 
 At the time of writing tarpaulin only supports
 x86_64 CPU architectures running Linux.
