@@ -18,28 +18,41 @@
 
 At the time of writing tarpaulin only supports
 x86_64 CPU architectures running Linux.
+        
         cargo install cargo-tarpaulin
-    - to check coverage
+
+- to check coverage
+
         cargo tarpaulin --ignore-tests
 
 ## CI
 
 #### Linting
+
         rustup component add clippy
 
-    - run without getting warnings
+- run without getting warnings
+
         cargo clippy -- -D warnings
 
 #### Formatting
+
         rustup component add rustfmt
-    - format whole project with 
+
+- format whole project with 
+
         cargo fmt
-    - in our CI pipeline, we'll simply add a formatting step
+
+- in our CI pipeline, we'll simply add a formatting step
+
         cargo fmt -- --check
 
 #### Security vulnerabilities
+
         cargo install cargo-audit
-    - once installed, run
+
+- once installed, run
+
         cargo audit
 
         
