@@ -1,4 +1,4 @@
-[click on this link](#february-9-,-2023)
+[click on this link](#february-9-2023)
 
 ### My Multi Word Header
 
@@ -117,5 +117,5 @@ Use the nightly toolchain just for this command invocation
 
 In other words, the job of #[tokio::main] is to give us the illusion of being able to define an asynchronous main while, under the hood, it just takes our main asynchronous body and writes the necessary boilerplate to make it run on top of tokio’s runtime.
 
-# February 9, 2023 
+# February 9 2023 
 
