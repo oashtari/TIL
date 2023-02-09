@@ -1,6 +1,5 @@
-[click on this link](#february-9-2023)
-
-### My Multi Word Header
+[2/8/23](#february-8-2023)
+[2/9/23](#february-9-2023)
 
 # February 8, 2023 
 
