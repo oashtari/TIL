@@ -120,7 +120,86 @@ In other words, the job of #[tokio::main] is to give us the illusion of being ab
 
 # February 9 2023 
 
-FAIL
+:(
 
 # February 10 2023 
 
+Can do route specific manual tests with cli commands. Launch the application first in another terminal with `cargo run`
+        curl -v http://127.0.0.1:8000/health_check
+
+### Integration testing
+
+Testing the API by interacting with it in the same exact way a user would: performing HTTP requests against it and verifying our assumptions on the responses we receive.
+
+This is often referred to as black box testing: we verify the behaviour of a system by examining its output given a set of inputs without having access to the details of its internal implementation.
+
+-- 
+
+We will opt for a fully black-box solution: we will launch our application at the beginning of each test and interact with it using an off-the-shelf HTTP client (e.g. reqwest).
+
+-- 
+
+Test locations:
+
+#### embedded test modules -- is part of your project, just hidden behind a configuration conditional check, #[cfg(test)].
+
+// Some code I want to test
+        #[cfg(test)]
+        mod tests {
+            // Import the code I want to test
+        use super::*; // My tests
+        }
+
+#### external tests folder 
+        src/
+        tests/
+        Cargo.toml
+        Cargo.lock
+
+#### part of public documentation
+
+        /// Check if a number is even.
+        /// ```rust
+        /// use zero2prod::is_even;
+        ///
+        /// assert!(is_even(2));
+        /// assert!(!is_even(1));
+        /// ```
+        pub fn is_even(x: u64) -> bool {
+        x % 2 == 0 }
+
+Anything under the tests folder and your documentation tests, instead, are compiled in their own separate binaries.
+This has consequences when it comes to visibility rules.
+
+We need to refactor our project into a library and a binary: all our logic will live in the library crate while the binary itself will be just an entrypoint with a very slim main function.
+
+        [package]
+        name = "zero2prod"
+        version = "0.1.0"
+        authors = ["Luca Palmieri <contact@lpalmieri.com>"]
+        edition = "2021"
+        [dependencies]
+        # [...]
+
+We are relying on cargo’s default behaviour: unless something is spelled out, it will look for a src/main.rs file as the binary entrypoint and use the package.name field as the binary name.
+Looking at the manifest target specification, we need to add a lib section to add a library to our project:
+
+        [package]
+        name = "zero2prod"
+        version = "0.1.0"
+        authors = ["Luca Palmieri <contact@lpalmieri.com>"]
+        edition = "2021"
+        [lib]
+        # We could use any path here, but we are following the community convention
+        # We could specify a library name using the `name` field. If unspecified,
+        # cargo will default to `package.name`, which is what we want.
+        path = "src/lib.rs"
+        [dependencies]
+        # [...]
+
+Notice the double square brackets: it's an array in TOML's syntax.
+We can only have one library in a project, but we can have multiple binaries!
+If you want to manage multiple libraries in the same repository have a look at the workspace feature - we'll cover it later on.
+        [[bin]]
+        path = "src/main.rs"
+        name = "zero2prod"
