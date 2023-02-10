@@ -1,5 +1,7 @@
 [2/8/23](#february-8-2023)<br>
-[2/9/23](#february-9-2023)
+[2/9/23](#february-9-2023)<br>
+[2/10/23](#february-10-2023)<br>
+
 
 # February 8, 2023 
 
@@ -117,4 +119,8 @@ Use the nightly toolchain just for this command invocation
 In other words, the job of #[tokio::main] is to give us the illusion of being able to define an asynchronous main while, under the hood, it just takes our main asynchronous body and writes the necessary boilerplate to make it run on top of tokio’s runtime.
 
 # February 9 2023 
+
+FAIL
+
+# February 10 2023 
 
