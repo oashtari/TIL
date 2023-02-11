@@ -203,3 +203,84 @@ If you want to manage multiple libraries in the same repository have a look at t
         [[bin]]
         path = "src/main.rs"
         name = "zero2prod"
+
+`tokio::test` is the testing equivalent of `tokio::main`.
+It also spares you from having to specify the `#[test]` attribute.
+
+You can inspect what code gets generated using
+`cargo expand --test health_check` (<- name of the test file)
+
+Sample test:
+
+        #[tokio::test]
+        async fn health_check_works() {
+            // Arrange
+            spawn_app().await.expect("Failed to spawn our app."); 
+            // We need to bring in `reqwest` to perform HTTP requests against our application. let client = reqwest::Client::new();
+
+            // Act
+                let response = client
+                    .get("http://127.0.0.1:8000/health_check")
+                    .send()
+                    .await
+                    .expect("Failed to execute request.");
+
+            // Assert
+            assert!(response.status().is_success());
+            assert_eq!(Some(0), response.content_length()); }
+            
+            // Launch our application in the background ~somehow~
+            async fn spawn_app() -> std::io::Result<()> { todo!()
+        }
+
+Dev dependencies are used exclusively when running tests or examples
+They do not get included in the final application binary!
+[dev-dependencies]
+reqwest = "0.11"
+
+spawn_app is the only piece that will, reasonably, depend on our application code.
+
+        async fn spawn_app() -> std::io::Result<()> { 
+            zero2prod::run().await
+        }
+
+We need to run our application as a background task.
+tokio::spawn comes quite handy here: tokio::spawn takes a future and hands it over to the runtime for polling, 
+without waiting for its completion; 
+it therefore runs concurrently with downstream futures and tasks (e.g. our test logic).
+
+// Notice the different signature!
+// We return `Server` on the happy path and we dropped the `async` keyword // We have no .await call, so it is not needed anymore.
+        pub fn run() -> Result<Server, std::io::Error> {
+            let server = HttpServer::new(|| { 
+                App::new()
+                .route("/health_check", web::get().to(health_check))
+                    })
+                .bind("127.0.0.1:8000")?
+                .run();
+                // No .await here!
+            Ok(server)
+        }
+
+No .await call, therefore no need for `spawn_app` to be async now.
+We are also running tests, so it is not worth it to propagate errors:
+if we fail to perform the required setup we can just panic and crash all the things.
+        fn spawn_app() {
+                let server = zero2prod::run()
+                    .expect("Failed to bind address"); 
+                    // Launch the server as a background task
+                    // tokio::spawn returns a handle to the spawned future,
+                    // but we have no use for it here, hence the non-binding let let _ = tokio::spawn(server);
+            }
+
+tokio::test spins up a new runtime at the beginning of each test case and they shut down at the end of each test case.
+
+We need our port to be dynamic, not hard-coded.
+The operating system comes to the rescue: we will be using port 0.
+Port 0 is special-cased at the OS level: trying to bind port 0 will trigger an OS scan for an available port which will then be bound to the application.
+
+We need, somehow, to find out what port the OS has gifted our application and return it from spawn_app.
+There are a few ways to go about it - we will use a std::net::TcpListener.
+Our HttpServer right now is doing double duty: given an address, it will bind it and then start the applic- ation. We can take over the first step: we will bind the port on our own with TcpListener and then hand that over to the HttpServer using listen.
+
+### Working with HTML Forms
