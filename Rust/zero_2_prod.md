@@ -1,7 +1,7 @@
 [2/8/23](#february-8-2023)<br>
 [2/9/23](#february-9-2023)<br>
 [2/10/23](#february-10-2023)<br>
-
+[2/11/23](#february-11-2023)<br>
 
 # February 8, 2023 
 
@@ -282,5 +282,7 @@ Port 0 is special-cased at the OS level: trying to bind port 0 will trigger an O
 We need, somehow, to find out what port the OS has gifted our application and return it from spawn_app.
 There are a few ways to go about it - we will use a std::net::TcpListener.
 Our HttpServer right now is doing double duty: given an address, it will bind it and then start the applic- ation. We can take over the first step: we will bind the port on our own with TcpListener and then hand that over to the HttpServer using listen.
+
+# February 11, 2023 
 
 ### Working with HTML Forms
