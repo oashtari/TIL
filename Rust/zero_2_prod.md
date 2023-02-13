@@ -2,6 +2,7 @@
 [2/9/23](#february-9-2023)<br>
 [2/10/23](#february-10-2023)<br>
 [2/11/23](#february-11-2023)<br>
+[2/13/23](#february-13-2023)<br>
 
 # February 8, 2023 
 
@@ -285,4 +286,47 @@ Our HttpServer right now is doing double duty: given an address, it will bind it
 
 # February 11, 2023 
 
+Figured out my .gitconfigure was not set up, so my work was not getting me green dots on GitHub :(
+
+# February 12, 2023
+
+Day off.
+
+# February 13, 2023 
+
 ### Working with HTML Forms
+
+There are a few options available when using HTML forms: application/x-www-form-urlencoded is the most suitable to our usecase.
+Quoting MDN web docs, with application/x-www-form-urlencoded
+        "the keys and values [in our form] are encoded in key-value tuples separated by ‘&’, with a ‘=’ between
+        the key and the value. Non-alphanumeric characters in both keys and values are percent encoded."
+
+#### Parsing form data from a POST request
+
+A 404 means it's not hitting an endpoint, so we need to add a .route for the path we want.
+
+        pub fn run(listener: TcpListener) -> Result<Server, std::io::Error> { let server = HttpServer::new(|| {
+            App::new()
+            .route("/health_check", web::get().to(health_check))
+            // A new entry in our routing table for POST /subscriptions requests .route("/subscriptions", web::post().to(subscribe))
+            }) .listen(listener)? .run();
+        
+            Ok(server)
+        }
+
+We need to implement Extractors. Extractors are used, as the name implies, to tell the framework to extract certain pieces of information from an incoming request.
+actix-web provides several extractors out of the box to cater for the most common usecases:
+    • Path to get dynamic path segments from a request’s path; 
+    • Query for query parameters;
+    • Json to parse a JSON-encoded request body;
+    • etc.
+
+    Form data helper (application/x-www-form-urlencoded).
+    Can be used to extract url-encoded data from the request body, or send url-encoded data as the re- sponse.
+
+    An extractor can be accessed as an argument to a handler function. Actix-web supports up to 10
+    extractors per handler function. Argument position does not matter.
+
+#### Serialization
+
+    "Serde is a framework for serializing and deserializing Rust data structures efficiently and generically."
