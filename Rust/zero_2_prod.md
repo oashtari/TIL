@@ -330,3 +330,24 @@ actix-web provides several extractors out of the box to cater for the most commo
 #### Serialization
 
     "Serde is a framework for serializing and deserializing Rust data structures efficiently and generically."
+
+### Database setup
+
+To run queries in our test suite we need:
+    • a running Postgres instance12;
+    • atabletostoreoursubscribersdata.
+
+Install Postgres, which should include PG Admin 4.
+Run in terminal:
+        export PATH="/Library/PostgreSQL/15/bin:$PATH"
+
+Install sqlx
+        cargo install --version="~0.6" sqlx-cli --no-default-features --features rustls,postgres
+
+Launch postgres by running:
+
+        ./scripts/init_db.sh
+
+Create a database:
+        sqlx-database-create
+
