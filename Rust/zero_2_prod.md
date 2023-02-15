@@ -3,6 +3,7 @@
 [2/10/23](#february-10-2023)<br>
 [2/11/23](#february-11-2023)<br>
 [2/13/23](#february-13-2023)<br>
+[2/14/23](#february-14-2023)<br>
 
 # February 8, 2023 
 
@@ -349,5 +350,82 @@ Launch postgres by running:
         ./scripts/init_db.sh
 
 Create a database:
+
         sqlx-database-create
+
+# February 14, 2023 
+
+To migrate database tables:
+
+        sqlx migrate run
+
+To migrate by skipping Docker:
+
+        SKIP_DOCKER=true ./scripts/init_db.sh
+
+Add sqlx as a dependency to cargo.toml
+
+        [dependencies.sqlx] version = "0.6" default-features = false features = [
+            "runtime-tokio-rustls",
+            "macros",
+            "postgres",
+            "uuid",
+            "chrono",
+            "migrate"
+        ]
+
+Yeah, there are a lot of feature flags. Let’s go through all of them one by one:
+    • runtime-tokio-rustls tells sqlx to use the tokio runtime for its futures and rustls as TLS backend;
+    • macros gives us access to sqlx::query! and sqlx::query_as!, which we will be using extensively;
+    • postgres unlocks Postgres-specific functionality (e.g. non-standard SQL types);
+    • uuid adds support for mapping SQL UUIDs to the Uuid type from the uuid crate. We need it to work
+    with our id column;
+    • chrono adds support for mapping SQL timestamptz to the DateTime<T> type from the chrono crate.
+    We need it to work with our subscribed_at column;
+    • migrate gives us access to the same functions used under the hood by sqlx-cli to manage migrations.
+    It will turn out to be useful for our test suite.
+
+#### Configuration Management for a DB
+
+The simplest entrypoint to connect to a Postgres database is PgConnection.
+
+PgConnection implements the Connection trait which provides us with a connect method: it takes as input a connection string and returns us, asynchronously, a Result<PostgresConnection, sqlx::Error>.
+
+The config crate is Rust’s swiss-army knife when it comes to configuration: it supports multiple file formats and it lets you combine different sources hierarchically (e.g. environment variables, configuration files, etc.) to easily customise the behaviour of your application for each deployment environment.
+
+### File structure
+
+src/
+    configuration.rs
+    lib.rs
+    main.rs
+    routes/
+        mod.rs
+        health_check.rs
+        subscriptions.rs
+    startup.rs
+
+startup.rs will host our run function
+health_check goes into routes/health_check.rs
+subscribe and FormData into routes/subscriptions.rs
+configuration.rs starts empty. 
+
+#### Reading a configuration file
+
+Tomanageconfigurationwithconfigwemustrepresentour application settings as a Rust type that implements serde’s Deserialize trait.
+
+Let’s create a new Settings struct:
+
+        #[derive(serde::Deserialize)] 
+        pub struct Settings {}
+
+We have two groups of configuration values at the moment:
+    • the application port, where actix-web is listening for incoming requests (currently hard-coded to 8000 in main.rs);
+    • the database connection parameters.
+
+Make sure to add config as a dependency.
+
+We want to read our application settings from a configuration file named configuration.yaml.
+
+#### Connecting to Postgres
 
