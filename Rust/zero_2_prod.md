@@ -4,6 +4,7 @@
 [2/11/23](#february-11-2023)<br>
 [2/13/23](#february-13-2023)<br>
 [2/14/23](#february-14-2023)<br>
+[2/18/23](#february-18-2023)<br>
 
 # February 8, 2023 
 
@@ -426,6 +427,8 @@ We have two groups of configuration values at the moment:
 Make sure to add config as a dependency.
 
 We want to read our application settings from a configuration file named configuration.yaml.
+
+# February 18, 2023 
 
 #### Connecting to Postgres
 
