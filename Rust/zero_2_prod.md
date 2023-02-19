@@ -5,6 +5,8 @@
 [2/13/23](#february-13-2023)<br>
 [2/14/23](#february-14-2023)<br>
 [2/18/23](#february-18-2023)<br>
+[2/19/23](#february-19-2023)<br>
+[previous week](/React/template_files.md)
 
 # February 8, 2023 
 
@@ -431,4 +433,83 @@ We want to read our application settings from a configuration file named configu
 # February 18, 2023 
 
 #### Connecting to Postgres
+
+PgConnection::connect wants a single connection string as input, while DatabaseSettings provides us with granular access to all the connection parameters. Let’s add a convenient connection_string method to do it:
+
+                //! src/configuration.rs
+                // [...]
+                impl DatabaseSettings {
+                pub fn connection_string(&self) -> String { format!(
+                        "postgres://{}:{}@{}:{}/{}",
+                        self.username, self.password, self.host, self.port, self.database_name
+                        )
+                } }
+
+As we discussed before, sqlx reaches out to Postgres at compile-time to check that queries are well-formed. Just like sqlx-cli commands, it relies on the DATABASE_URL environment variable to know where to find the database.
+We could export DATABASE_URL manually, but we would then run in the same issue every time we boot our machine and start working on this project. Let’s take the advice of sqlx’s authors - we’ll add a top-level .env file
+
+                DATABASE_URL="postgres://postgres:password@localhost:5432/newsletter"
+
+sqlx will read DATABASE_URL from it and save us the hassle of re-exporting the environment variable every single time.
+
+It feels a bit dirty to have the database connection parameters in two places (.env and configuration.yaml), but it is not a major problem: configuration.yaml can be used to alter the runtime behaviour of the ap- plication after it has been compiled, while .env is only relevant for our development process, build and test steps.
+Commit the .env file to version control - we will need it in CI soon enough!
+
+If you check on it, you will notice that your CI pipeline is now failing to perform most of the checks we introduced at the beginning of our journey.
+Our tests now rely on a running Postgres database to be executed properly. All our build commands (cargo check, cargo lint, cargo build), due to sqlx’s compile-time checks, need an up-and-running database!
+We do not want to venture further with a broken CI.
+You can find an updated version of the GitHub Actions setup on GitHub. Only general.yml needs to be updated.
+
+#### Persisting a new subscriber
+
+To execute a query within subscribe we need to get our hands on a database connection.
+
+#### application state in actix-web
+
+actix-web gives us the possibility to attach to the application other pieces of data that are not related to the lifecycle of a single incoming request - the so-called application state.
+
+You can add information to the application state using the app_data method on App.
+
+Let’s try to use app_data to register a PgConnection as part of our application state. We need to modify our
+run method to accept a PgConnection alongside the TcpListener:
+
+#### atcix-web Workers
+
+HttpServer::new does not take App as argument - it wants a closure that returns an App struct.
+
+This is to support actix-web’s runtime model: actix-web will spin up a worker process for each available core on your machine.
+
+Each worker runs its own copy of the application built by HttpServer calling the very same closure that HttpServer::new takes as argument.
+
+That is why connection has to be cloneable - we need to have one for every copy of App.
+But, as we said, PgConnection does not implement Clone because it sits on top of a non-cloneable system resource, a TCP connection with Postgres. What do we do?
+
+We can use web::Data, another actix-web extractor.
+web::Data wraps our connection in an Atomic Reference Counted pointer, an Arc: each instance of the application, instead of getting a raw copy of a PgConnection, will get a pointer to one.
+
+Arc<T> is always cloneable, no matter who T is: cloning an Arc increments the number of active references and hands over a new copy of the memory address of the wrapped value.
+
+Handlers can then access the application state using the same extractor.
+
+#### data extractor
+
+We called Data an extractor, but what is it extracting a PgConnection from?
+
+actix-web uses a type-map to represent its application state: a HashMap that stores arbitrary data (using the Any type) against their unique type identifier (obtained via TypeId::of).
+
+web::Data, when a new request comes in, computes the TypeId of the type you specified in the signature (in our case PgConnection) and checks if there is a record corresponding to it in the type-map. If there is one, it casts the retrieved Any value to the type you specified (TypeId is unique, nothing to worry about) and passes it to your handler.
+
+It is an interesting technique to perform what in other language ecosystems might be referred to as dependency injection.
+
+#### The Insert query
+
+Let’s unpack what is happening:
+        • we are binding dynamic data to our INSERT query. $1 refers to the first argument passed to query! after the query itself, $2 to the second and so forth. query! verifies at compile-time that the provided number of arguments matches what the query expects as well as that their types are compatible (e.g. you can’t pass a number as id);
+        • wearegeneratingarandomUuidforid;
+        • weareusingthecurrenttimestampintheUtctimezoneforsubscribed_at.
+
+We have to add two new dependencies as well to our Cargo.toml to fix the obvious compiler errors:
+
+                uuid = { version = "1", features = ["v4"] }
+                chrono = { version = "0.4.22", default-features = false, features = ["clock"] }
 
