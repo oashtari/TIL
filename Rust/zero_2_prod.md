@@ -513,3 +513,67 @@ We have to add two new dependencies as well to our Cargo.toml to fix the obvious
                 uuid = { version = "1", features = ["v4"] }
                 chrono = { version = "0.4.22", default-features = false, features = ["clock"] }
 
+# February 19, 2023 
+
+sqlx has an asynchronous interface, but it does not allow you to run multiple queries concurrently over the same database connection.
+
+Requiring a mutable reference allows them to enforce this guarantee in their API. You can think of a mutable reference as a unique reference: the compiler guarantees to execute that they have indeed exclusive access to that PgConnection because there cannot be two active mutable references to the same value at the same time in the whole program. Quite neat.
+
+Let’s take a second look at the documentation for sqlx’s Executor trait: what else implements Executor apart from &mut PgConnection?
+Bingo: a shared reference to PgPool.
+
+                // The function is asynchronous now!
+                async fn spawn_app() -> TestApp {
+                        let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
+
+                        let port = listener.local_addr().unwrap().port(); let address = format!("http://127.0.0.1:{}", port);
+                        
+                        let configuration = get_configuration().expect("Failed to read configuration.");
+                        let connection_pool = PgPool::connect(
+                                &configuration.database.connection_string()
+                                )
+                                .await
+                                .expect("Failed to connect to Postgres.");
+                        
+                        let server = run(listener, connection_pool.clone())
+                                .expect("Failed to bind address");
+                        
+                        let _ = tokio::spawn(server); TestApp {
+                                address,
+                                db_pool: connection_pool,
+                        }
+                }
+
+#### Test Isolation
+
+Your database is a gigantic global variable: all your tests are interacting with it and whatever they leave behind will be available to other tests in the suite as well as to the following test runs.
+
+You really do not want to have any kind of interaction between your tests: it makes your test runs non- deterministic and it leads down the line to spurious test failures that are extremely tricky to hunt down and fix.
+There are two techniques I am aware of to ensure test isolation when interacting with a relational database in a test:
+        • wrap the whole test in a SQL transaction and roll back at the end of it; 
+        • spin up a brand-new logical database for each integration test.
+
+Before each test run, we want to:
+        • create a new logical database with a unique name;
+        • run database migrations on it.
+
+The best place to do this is spawn_app, before launching our actix-web test application.
+
+configuration.database.connection_string() uses the database_name specified in our configura- tion.yaml file - the same for all tests.
+Let’s randomise it with:
+                let mut configuration = get_configuration().expect("Failed to read configuration."); configuration.database.database_name = Uuid::new_v4().to_string();
+                let connection_pool = PgPool::connect( &configuration.database.connection_string()
+                )
+                .await
+                .expect("Failed to connect to Postgres.");
+
+cargo test will fail: there is no database ready to accept connections using the name we generated. Let’s add a connection_string_without_db method to our DatabaseSettings:
+
+Omitting the database name we connect to the Postgres instance, not a specific logical database. We can now use that connection to create the database we need and run migrations on it:
+
+sqlx::migrate! is the same macro used by sqlx-cli when executing sqlx migrate run - no need to throw bash scripts into the mix to achieve the same result.
+
+You might have noticed that we do not perform any clean-up step at the end of our tests - the logical databases we create are not being deleted. This is intentional: we could add a clean-up step, but our Postgres instance is used only for test purposes and it’s easy enough to restart it if, after hundreds of test runs, performance starts to suffer due to the number of lingering (almost empty) databases.
+
+### Telemetry
+
