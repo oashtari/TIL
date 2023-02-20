@@ -6,6 +6,8 @@
 [2/14/23](#february-14-2023)<br>
 [2/18/23](#february-18-2023)<br>
 [2/19/23](#february-19-2023)<br>
+[2/20/23](#february-20-2023)<br>
+
 [previous week](/React/template_files.md)
 
 # February 8, 2023 
@@ -575,5 +577,47 @@ sqlx::migrate! is the same macro used by sqlx-cli when executing sqlx migrate ru
 
 You might have noticed that we do not perform any clean-up step at the end of our tests - the logical databases we create are not being deleted. This is intentional: we could add a clean-up step, but our Postgres instance is used only for test purposes and it’s easy enough to restart it if, after hundreds of test runs, performance starts to suffer due to the number of lingering (almost empty) databases.
 
+
+# February 20, 2023 
+
 ### Telemetry
+
+#### Logs and the Log Crate
+
+Log crate's five macros:  trace, debug, info, warn and error.
+
+actix_web provides a Logger middleware. It emits a log record for every incoming request.
+
+                use actix_web::middleware::Logger;
+
+command for checking PORTs 
+
+                sudo lsof -iTCP -sTCP:LISTEN -n -P
+
+Add dependency:
+
+                env_logger = "0.9"
+
+env_logger::Logger prints log records to the terminal, using the following format:
+
+                [<timestamp> <level> <module path>] <log message>
+
+RUST_LOG=debug cargo run, for example, will surface all logs at debug-level or higher emitted by our applic- ation or the crates we are using.
+
+RUST_LOG=zero2prod, instead, would filter out all records emitted by our dependencies
+
+#### Interactions with external systems
+
+Let’s start with a tried-and-tested rule of thumb: any interaction with external systems over the network should be closely monitored. We might experience networking issues, the database might be unavailable, queries might get slower over time as the subscribers table gets longer, etc.
+
+Logs need to be correlated
+
+We need a way to correlate all logs related to the same request.
+This is usually achieved using a request id (also known as correlation id): when we start to process an in- coming request we generate a random identifier (e.g. a UUID) which is then associated to all logs concerning the fulfilling of that specific request.
+
+#### Structred logging
+
+The tracing crate.
+
+tracing expands upon logging-style diagnostics by allowing libraries and applications to record structured events with additional information about temporality and causality — unlike a log mes- sage, a span in tracing has a beginning and end time, may be entered and exited by the flow of execu- tion, and may exist within a nested tree of similar spans.
 
