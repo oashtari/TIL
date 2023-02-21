@@ -7,6 +7,7 @@
 [2/18/23](#february-18-2023)<br>
 [2/19/23](#february-19-2023)<br>
 [2/20/23](#february-20-2023)<br>
+[2/21/23](#february-21-2023)<br>
 
 [previous week](/React/template_files.md)
 
@@ -785,4 +786,112 @@ We are still generating a request_id at the function-level which overrides the r
 
 It is not an exaggeration to state that tracing is a foundational crate in the Rust ecosystem. While log is the minimum common denominator, tracing is now established as the modern backbone of the whole diagnostics and instrumentation ecosystem.
 
+# February 21, 2023 
+
 ## Going Live
+
+### Virtualization: Docker
+
+The easiest way to ensure that our software runs correctly is to tightly control the environment it is being executed into.
+
+what if, instead of shipping code to produc- tion, you could ship a self-contained environment that included your application?!
+
+### Hosting: Digital Ocean
+
+#### Dockerfiles
+
+A Dockerfile is a recipe for your application environment.
+
+They are organised in layers: you start from a base image (usually an OS enriched with a programming language toolchain) and execute a series of commands (COPY, RUN, etc.), one after the other, to build the environment you need.
+
+                # We use the latest Rust stable release as base image
+                FROM rust:1.63.0
+                # Let's switch our working directory to `app` (equivalent to `cd app`)
+                # The `app` folder will be created for us by Docker in case it does not
+                # exist already.
+                WORKDIR /app
+                # Install the required system dependencies for our linking configuration
+                RUN apt update && apt install lld clang -y
+                # Copy all files from our working environment to our Docker image
+                COPY . .
+                # Let's build our binary!
+                # We'll use the release profile to make it faaaast
+                RUN cargo build --release
+                # When `docker run` is executed, launch the binary!
+                ENTRYPOINT ["./target/release/zero2prod"]
+
+The process of executing those commands to get an image is called building. Using the Docker CLI:
+
+                # Build a docker image tagged as "zero2prod" according to the recipe
+                # specified in `Dockerfile`
+                docker build --tag zero2prod --file Dockerfile .
+
+#### Build context
+
+docker build generates an image starting from a recipe (the Dockerfile) and a build context.
+
+You can picture the Docker image you are building as its own fully isolated environment.
+The only point of contact between the image and your local machine are commands like COPY or ADD2 : the build context determines what files on your host machine are visible inside the Docker container to COPY and its friends.
+
+Using . we are telling Docker to use the current directory as the build context for this image; COPY . app will therefore copy all files from the current directory (including our source code!) into the app directory of our Docker image.
+
+Using . as build context implies, for example, that Docker will not allow COPY to see files from the parent directory or from arbitrary paths on your machine into the image.
+
+#### Sqlx offline mode
+
+Add sqlx offline to cargo.toml
+
+                # Using table-like toml syntax to avoid a super-long line!
+                [dependencies.sqlx] version = "0.6" default-features = false features = [
+                "runtime-tokio-rustls",
+                "macros",
+                "postgres",
+                "uuid",
+                "chrono",
+                "migrate",
+                "offline"
+                ]
+
+sqlx prepare
+
+                sqlx-prepare
+                Generate query metadata to support offline compile-time verification.
+                Saves metadata for all invocations of `query!` and related macros to
+                `sqlx-data.json` in the current directory, overwriting if needed.
+                During project compilation, the absence of the `DATABASE_URL` environment
+                variable or the presence of `SQLX_OFFLINE` will constrain the compile-time
+                verification to only read from the cached query metadata.
+                USAGE:
+                sqlx prepare [FLAGS] [-- <args>...]
+                ARGS:
+                <args>...
+                        Arguments to be passed to `cargo rustc ...`
+                FLAGS:
+                        --check
+                        Run in 'check' mode. Exits with 0 if the query metadata is up-to-date.
+                        Exits with 1 if the query metadata needs updating
+
+In other words, prepare performs the same work that is usually done when cargo build is invoked but it saves the outcome of those queries to a metadata file (sqlx-data.json) which can later be detected by sqlx itself and used to skip the queries altogether and perform an offline build.
+
+                # It must be invoked as a cargo subcommand
+                # All options after `--` are passed to cargo itself
+                # We need to point it at our library since it contains
+                # all our SQL queries.
+                cargo sqlx prepare -- --lib
+
+query data written to `sqlx-data.json` in the current directory; please check this into version control
+
+We will indeed commit the file to version control, as the command output suggests.
+Let’s set the SQLX_OFFLINE environment variable to true in our Dockerfile to force sqlx to look at the saved metadata instead of trying to query a live database:
+
+                FROM rust:1.63.0
+                WORKDIR /app
+                RUN apt update && apt install lld clang -y
+                COPY . .
+                ENV SQLX_OFFLINE true
+                RUN cargo build --release
+                ENTRYPOINT ["./target/release/zero2prod"]
+
+Then run the build:
+
+                docker build --tag zero2prod --file Dockerfile .
