@@ -621,3 +621,168 @@ The tracing crate.
 
 tracing expands upon logging-style diagnostics by allowing libraries and applications to record structured events with additional information about temporality and causality — unlike a log mes- sage, a span in tracing has a beginning and end time, may be entered and exited by the flow of execu- tion, and may exist within a nested tree of similar spans.
 
+##### tracing's span
+
+                pub async fn subscribe(/* */) -> HttpResponse {
+                        let request_id = Uuid::new_v4();
+                        // Spans, like logs, have an associated level // `info_span` creates a span at the info-level let request_span = tracing::info_span!(
+                                "Adding a new subscriber.",
+                                %request_id,
+                                subscriber_email = %form.email,
+                                subscriber_name = %form.name
+                        );
+                        // Using `enter` in an async function is a recipe for disaster!
+                        // Bear with me for now, but don't do this at home.
+                        // See the following section on `Instrumenting Futures`
+                        let _request_span_guard = request_span.enter();
+                        // [...]
+                        // `_request_span_guard` is dropped at the end of `subscribe`
+                        // That's when we "exit" the span
+                        }
+
+        We are using the info_span! macro to create a new span and attach some values to its context: request_id, form.email and form.name.
+
+        We are not using string interpolation anymore: tracing allows us to associate structured information to our spans as a collection of key-value pairs2. We can explicitly name them (e.g. subscriber_email for form.email) or implicitly use the variable name as key (e.g. the isolated request_id is equivalent to re- quest_id = request_id).
+
+        Notice that we prefixed all of them with a % symbol: we are telling tracing to use their Display implement- ation for logging purposes. You can find more details on the other available options in their documentation.
+
+        info_span returns the newly created span, but we have to explicit step into it using the .enter() method to
+        activate it.
+
+        .enter() returns an instance of Entered, a guard: as long the guard variable is not dropped all downstream spans and log events will be registered as children of the entered span. This is a typical Rust pattern, often referred to as Resource Acquisition Is Initialization (RAII): the compiler keeps track of the lifetime of all variables and when they go out of scope it inserts a call to their destructor, Drop::drop.
+
+        The default implementation of the Drop trait simply takes care of releasing the resources owned by that variable. We can, though, specify a custom Drop implementation to perform other cleanup operations on drop - e.g. exiting from a span when the Entered guard gets dropped:
+
+        Inspecting the source code of your dependencies can often expose some gold nuggets - we just found out that if the log feature flag is enabled tracing will emit a trace-level log when a span exits.
+
+        run     RUST_LOG=trace cargo run
+
+
+        You can enter (and exit) a span multiple times. Closing, instead, is final: it happens when the span itself is dropped.
+        This comes pretty handy when you have a unit of work that can be paused and then resumed - e.g. an asyn- chronous task!
+
+#### Instrumenting features
+
+The executor might have to poll its future more than once to drive it to completion - while that future is idle, we are going to make progress on other futures.
+
+This can clearly cause issues: how do we make sure we don’t mix their respective spans?
+
+The best way would be to closely mimic the future’s lifecycle: we should enter into the span associated to our future every time it is polled by the executor and exit every time it gets parked.
+
+That’s where Instrument comes into the picture. It is an extension trait for futures. Instrument::instrument does exactly what we want: enters the span we pass as argument every time self, the future, is polled; it exits the span every time the future is parked.
+
+#### Tracing's subscriber
+
+env_logger’s logger implements log’s Log trait - it knows nothing about the rich structure exposed by tra- cing’s Span!
+tracing’s compatibility with log was great to get off the ground, but it is now time to replace env_logger with a tracing-native solution.
+
+The tracing crate follows the same facade pattern used by log - you can freely use its macros to instrument your code, but applications are in charge to spell out how that span telemetry data should be processed. 
+
+Subscriber is the tracing counterpart of log’s Log: an implementation of the Subscriber trait exposes a variety of methods to manage every stage of the lifecycle of a Span - creation, enter/exit, closure, etc.
+
+tracing does not provide any subscriber out of the box.
+We need to look into tracing-subscriber, another crate maintained in-tree by the tracing project, to find a few basic subscribers to get off the ground.
+
+tracing-subscriber does much more than providing us with a few handy subscribers. It introduces another key trait into the picture, Layer.
+
+Layer makes it possible to build a processing pipeline for spans data: we are not forced to provide an all- encompassing subscriber that does everything we want; we can instead combine multiple smaller layers to obtain the processing pipeline we need.
+
+This substantially reduces duplication across in tracing ecosystem: people are focused on adding new capab- ilities by churning out new layers rather than trying to build the best-possible-batteries-included subscriber.
+
+The cornerstone of the layering approach is Registry.
+Registry implements the Subscriber trait and takes care of all the difficult stuff:
+
+        Registry does not actually record traces itself: instead, it collects and stores span data that is exposed to any layer wrapping it [...]. The Registry is responsible for storing span metadata, recording rela- tionships between spans, and tracking which spans are active and which are closed.
+
+        • tracing_subscriber::filter::EnvFilter discards spans based on their log levels and their origins, just as we did in env_logger via the RUST_LOG environment variable;
+        • tracing_bunyan_formatter::JsonStorageLayer processes spans data and stores the associated metadata in an easy-to-consume JSON format for downstream layers. It does, in particular, propagate context from parent spans to their children;
+        • tracing_bunyan_formatter::BunyanFormatterLayer builds on top of JsonStorageLayer and out- puts log records in bunyan-compatible JSON format.
+
+tracing-bunyan-formatter also provides duration out-of-the-box: every time a span is closed a JSON mes- sage is printed to the console with an elapsed_millisecond property attached to it.
+
+#### tracing-log
+
+log does not emit tracing events out of the box and does not provide a feature flag to enable this behaviour.
+If we want it, we need to explicitly register a logger implementation to redirect logs to our tracing subscriber for processing.
+We can use LogTracer, provided by the tracing-log crate.
+
+#### Removing unused dependencies
+
+                cargo install cargo-udeps
+
+cargo-udeps scans your Cargo.toml file and checks if all the crates listed under [dependencies] have actu- ally been used in the project. Check cargo-deps’ trophy case for a long list of popular Rust projects where cargo-udeps was able to spot unused dependencies and cut down build times.
+
+                # cargo-udeps requires the nightly compiler.
+                # We add +nightly to our cargo invocation
+                # to tell cargo explicitly what toolchain we want to use.
+                cargo +nightly udeps
+
+#### Logs for integration testing
+
+As a rule of thumb, everything we use in our application should be reflected in our integration tests.
+
+init_subscriber should only be called once, but it is being invoked by all our tests. We can use once_cell to rectify it5
+
+cargo test solves the very same problem for println/print statements. By default, it swallows everything that is printed to console. You can explicitly opt in to look at those print statements using cargo test -- --nocapture.
+
+We need an equivalent strategy for our tracing instrumentation.
+Let’s add a new parameter to get_subscriber to allow customisation of what sink logs should be written to:
+
+In our test suite we will choose the sink dynamically according to an environment variable, TEST_LOG. If TEST_LOG is set, we use std::io::stdout.
+If TEST_LOG is not set, we send all logs into the void using std::io::sink.
+Our own home-made version of the --nocapture flag.
+
+When you want to see all logs coming out of a certain test case to debug it you can run
+
+                # We are using the `bunyan` CLI to prettify the outputted logs
+                # The original `bunyan` requires NPM, but you can install a Rust-port with
+                # `cargo install bunyan`
+                TEST_LOG=true cargo test health_check_works | bunyan
+
+In other words, we’d like to wrap the subscribe function in a span.
+This requirement is fairly common: extracting each sub-task in its own function is a common way to struc- ture routines to improve readability and make it easier to write tests; therefore we will often want to attach a span to a function declaration.
+tracing caters for this specific usecase with its tracing::instrument procedural macro. Let’s see it in ac- tion:
+
+#[tracing::instrument] creates a span at the beginning of the function invocation and automatically at- taches all arguments passed to the function to the context of the span - in our case, form and pool. Often function arguments won’t be displayable on log records (e.g. pool) or we’d like to specify more explicitly what should/how they should be captured (e.g. naming each field of form) - we can explicitly tell tracing to ignore them using the skip directive.
+
+#### Protect your secrets
+
+There is actually one element of #[tracing::instrument] that I am not fond of: it automatically attaches all arguments passed to the function to the context of the span - you have to opt-out of logging function inputs (via skip) rather than opt-in6 .
+
+You can prevent this scenario by introducing a wrapper type that explicitly marks which fields are considered
+to be sensitive - secrecy::Secret.
+
+There is an additional upside to an explicit wrapper type: it serves as documentation for new developers who are being introduced to the codebase. It nails down what is considered sensitive in your domain/according to the relevant regulation.
+The only secret value we need to worry about, right now, is the database password. Let's wrap it:
+
+                use secrecy::Secret; // [..]
+                #[derive(serde::Deserialize)] pub struct DatabaseSettings {
+                // [...]
+                pub password: Secret<String>,
+                }
+
+Secret does not interfere with deserialization - Secret implements serde::Deserialize by delegating to the deserialization logic of the wrapped type (if you enable the serde feature flag, as we did).
+
+The compiler error is a great prompt to notice that the entire database connection string should be marked as Secret as well given that it embeds the database password:
+
+#### Request ID
+
+We have one last job to do: ensure all logs for a particular request, in particular the record with the returned status code, are enriched with a request_id property. How?
+If our goal is to avoid touching actix_web::Logger the easiest solution is adding another middleware, Re- questIdMiddleware, that is in charge of:
+• generatingauniquerequestidentifier;
+• creatinganewspanwiththerequestidentifierattachedascontext;
+• wrappingtherestofthemiddlewarechaininthenewlycreatedspan.
+We would be leaving a lot on the table though: actix_web::Logger does not give us access to its rich inform- ation (status code, processing time, caller IP, etc.) in the same structured JSON format we are getting from other logs - we would have to parse all that information out of its message string.
+We are better off, in this case, by bringing in a solution that is tracing-aware.
+
+It is designed as a drop-in replacement of actix-web’s Logger, just based on tracing instead of log:
+
+
+We have two different request_id for the same request!
+
+We are still generating a request_id at the function-level which overrides the request_id coming from TracingLogger.
+
+
+It is not an exaggeration to state that tracing is a foundational crate in the Rust ecosystem. While log is the minimum common denominator, tracing is now established as the modern backbone of the whole diagnostics and instrumentation ecosystem.
+
+## Going Live
