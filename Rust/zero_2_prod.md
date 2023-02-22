@@ -897,4 +897,131 @@ Then run the build:
 
                 docker build --tag zero2prod --file Dockerfile .
 
-# February 21, 2023 
+# February 22, 2023 
+
+#### Running an image
+
+When building our image we attached a tag to it, zero2prod:
+
+                docker run zero2prod
+
+docker run will trigger the execution of the command we specified in our ENTRYPOINT statement:
+
+                ENTRYPOINT ["./target/release/zero2prod"]
+
+In our case, it will execute our binary therefore launching our API.
+
+
+We can relax our requirements by using connect_lazy - it will only try to establish a connection when the pool is used for the first time.
+
+
+#### Networking
+
+By default, Docker images do not expose their ports to the underlying host machine. We need to do it explicitly using the -p flag.
+Let’s kill our running image to launch it again using:
+
+                docker run -p 8000:8000 zero2prod
+
+We are using 127.0.0.1 as our host in address - we are instructing our application to only accept connec- tions coming from the same machine.
+However, we are firing a GET request to /health_check from the host machine, which is not seen as local by our Docker image, therefore triggering the Connection refused error we have just seen.
+We need to use 0.0.0.0 as host to instruct our application to accept connections from any network interface, not just the local one.
+We should be careful though: using 0.0.0.0 significantly increases the “audience” of our application, with some security implications.
+The best way forward is to make the host portion of our address configurable - we will keep using 127.0.0.1 for our local development and set it to 0.0.0.0 in our Docker images.
+
+#### Hierarchical configuration
+
+Let’s introduce another struct, ApplicationSettings, to group together all configuration values related to our application address:
+
+                #[derive(serde::Deserialize)] pub struct Settings {
+                        pub database: DatabaseSettings,
+                        pub application: ApplicationSettings,
+                }
+
+                #[derive(serde::Deserialize)] pub struct ApplicationSettings {
+                        pub port: u16,
+                        pub host: String,
+                }
+
+We need to update our configuration.yaml file to match the new structure:
+
+as well as our main.rs, where we will leverage the new configurable host field:
+
+The host is now read from configuration, but how do we use a different value for different environments? We need to make our configuration hierarchical.
+
+Let’s have a look at get_configuration, the function in charge of loading our Settings struct:
+
+We are reading from a file named configuration to populate Settings’s fields. There is no further room for tuning the values specified in our configuration.yaml.
+Let’s take a more refined approach. We will have:
+        • A base configuration file, for values that are shared across our local and production environment (e.g. database name);
+        • A collection of environment-specific configuration files, specifying values for fields that require cus- tomisation on a per-environment basis (e.g. host);
+        • An environment variable, APP_ENVIRONMENT, to determine the running environment (e.g. produc- tion or local).
+All configuration files will live in the same top-level directory, configuration.
+The good news is that config, the crate we are using, supports all the above out of the box!
+
+
+Let’s refactor our configuration file to match the new structure.
+We have to get rid of configuration.yaml and create a new configuration directory with base.yaml, local.yaml and production.yaml inside.
+
+We can now instruct the binary in our Docker image to use the production configuration by setting the APP_ENVIRONMENT environment variable with an ENV instruction:
+
+
+#### Database connectivity
+
+Let’s fail a little faster by using a shorter timeout:
+
+#### Docker image size
+
+                docker images <name> (here it is zero2prod, the tag we gave it)
+
+can also run it for Rust
+
+                docker images rust:1.63.0
+
+Our first line of attack is reducing the size of the Docker build context by excluding files that are not needed to build our image.
+Docker looks for a specific file in our project to determine what should be ignored - .dockerignore
+Let’s create one in the root directory with the following content:
+
+                .env
+                target/
+                tests/
+                Dockerfile
+                scripts/
+                migrations/
+
+All files that match the patterns specified in .dockerignore are not sent by Docker as part of the build context to the image, which means they will not be in scope for COPY instructions.
+This will massively speed up our builds (and reduce the size of the final image) if we get to ignore heavy directories (e.g. the target folder for Rust projects).
+
+The next optimisation, instead, leverages one of Rust’s unique strengths.
+Rust’s binaries are statically linked3 - we do not need to keep the source code or intermediate compilation artifacts around to run the binary, it is entirely self-contained.
+This plays nicely with multi-stage builds, a useful Docker feature. We can split our build in two stages:
+        • abuilderstage,togenerateacompiledbinary; 
+        • aruntimestage,torunthebinary.
+
+runtime is our final image.
+The builder stage does not contribute to its size - it is an intermediate step and it is discarded at the end of the build. The only piece of the builder stage that is found in the final artifact is what we explicitly copy over - the compiled binary!
+
+We can go even smaller by shaving off the weight of the whole Rust toolchain and machinery (i.e. rustc, cargo, etc) - none of that is needed to run our binary.
+We can use the bare operating system as base image (debian:bullseye-slim) for our runtime stage:
+
+#### Caching for Rust Docker builds
+
+Each RUN, COPY and ADD instruction in a Dockerfile creates a layer: a diff between the previous state (the layer above) and the current state after having executed the specified command.
+
+Layers are cached: if the starting point of an operation has not changed (e.g. the base image) and the com- mand itself has not changed (e.g. the checksum of the files copied by COPY) Docker does not perform any computation and directly retrieves a copy of the result from the local cache.
+Docker layer caching is fast and can be leveraged to massively speed up Docker builds.
+The trick is optimising the order of operations in your Dockerfile: anything that refers to files that are chan- ging often (e.g. source code) should appear as late as possible, therefore maximising the likelihood of the previous step being unchanged and allowing Docker to retrieve the result straight from the cache.
+The expensive step is usually compilation.
+Most programming languages follow the same playbook: you COPY a lock-file of some kind first, build your dependencies, COPY over the rest of your source code and then build your project.
+This guarantees that most of the work is cached as long as your dependency tree does not change between one build and the next.
+
+
+cargo, unfortunately, does not provide a mechanism to build your project dependencies starting from its Cargo.lock file (e.g. cargo build --only-deps).
+Once again, we can rely on a community project to expand cargo’s default capability: cargo-chef5 .
+
+We are using three stages: the first computes the recipe file, the second caches our dependencies and then builds our binary, the third is our runtime environment. As long as our dependencies do not change the recipe.json file will stay the same, therefore the outcome of cargo chef cook --release --recipe- path recipe.json will be cached, massively speeding up our builds.
+We are taking advantage of how Docker layer caching interacts with multi-stage builds: the COPY . . state- ment in the planner stage will invalidate the cache for the planner container, but it will not invalidate the cache for the builder container as long as the checksum of the recipe.json returned by cargo chef pre- pare does not change.
+You can think of each stage as its own Docker image with its own caching - they only interact with each other when using the COPY --from statement.
+This will save us a massive amount of time in the next section.
+
+
+### Deploy to Digital Ocean Apps Platform
