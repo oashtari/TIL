@@ -1025,3 +1025,55 @@ This will save us a massive amount of time in the next section.
 
 
 ### Deploy to Digital Ocean Apps Platform
+
+Install Digital Ocean CLI:
+
+                brew install doctl
+
+Hosting on Digital Ocean’s App Platform is not free - keeping our app and its associated database up and running costs roughly 20.00 USD/month.
+I suggest you to destroy the app at the end of each session - it should keep your spend way below 1.00 USD. I spent 0.20 USD while playing around with it to write this chapter!
+
+#### App specification
+
+Digital Ocean’s App Platform uses a declarative configuration file to let us specify what our application deployment should look like - they call it App Spec.
+Looking at the reference documentation, as well as some of their examples, we can piece together a first draft of what our App Spec looks like.
+Let’s put this manifest, spec.yaml, at the root of our project directory.
+
+We can use their CLI, doctl, to create the application for the first time:
+
+                doctl apps create --spec spec.yaml
+
+Create a token on [Digital Ocean's API page](https://cloud.digitalocean.com/account/api/tokens?i=3a0da8)
+
+Authenticate with
+
+                doctl auth init
+
+Create the application:
+
+                doctl apps create --spec spec.yaml
+
+check the application with (or look on the Digital Ocean apps page):
+
+                doctl apps list
+
+Although the app has been successfully created it is not running yet!
+Check the Deployment tab on their dashboard - it is probably building the Docker image.
+Looking at a few recent issues on their bug tracker it might take a while - more than a few people have reported they experienced slow builds. Digital Ocean’s support engineers suggested to leverage Docker layer caching to mitigate the issue - we already covered all the bases there!
+
+Try firing off a health check request now, it should come back with a 200 OK!
+Notice that DigitalOcean took care for us to set up HTTPS by provisioning a certificate and redirecting HTTPS traffic to the port we specified in the application specification. One less thing to worry about.
+The POST /subscriptions endpoint is still failing, in the very same way it did locally: we do not have a live database backing our application in our production environment.
+Let’s provision one in the spec.yaml
+
+Then update the app specification
+
+                # You can retrieve your app id using `doctl apps list`
+                doctl apps update YOUR-APP-ID --spec=spec.yaml
+
+It will take some time for DigitalOcean to provision a Postgres instance.
+In the meantime we need to figure out how to point our application at the database in production.
+
+
+
+
