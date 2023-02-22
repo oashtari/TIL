@@ -8,6 +8,7 @@
 [2/19/23](#february-19-2023)<br>
 [2/20/23](#february-20-2023)<br>
 [2/21/23](#february-21-2023)<br>
+[2/22/23](#february-22-2023)<br>
 
 [previous week](/React/template_files.md)
 
@@ -895,3 +896,5 @@ Let’s set the SQLX_OFFLINE environment variable to true in our Dockerfile to f
 Then run the build:
 
                 docker build --tag zero2prod --file Dockerfile .
+
+# February 21, 2023 
