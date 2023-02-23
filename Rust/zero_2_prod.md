@@ -9,6 +9,7 @@
 [2/20/23](#february-20-2023)<br>
 [2/21/23](#february-21-2023)<br>
 [2/22/23](#february-22-2023)<br>
+[2/23/23](#february-23-2023)<br>
 
 [previous week](/React/template_files.md)
 
@@ -1023,6 +1024,8 @@ We are taking advantage of how Docker layer caching interacts with multi-stage b
 You can think of each stage as its own Docker image with its own caching - they only interact with each other when using the COPY --from statement.
 This will save us a massive amount of time in the next section.
 
+[Potential solution of Docker image is not building.](https://9to5answer.com/error-building-docker-image-39-executor-failed-running-bin-sh-c-apt-get-y-update-39)
+
 
 ### Deploy to Digital Ocean Apps Platform
 
@@ -1074,6 +1077,22 @@ Then update the app specification
 It will take some time for DigitalOcean to provision a Postgres instance.
 In the meantime we need to figure out how to point our application at the database in production.
 
+#### How to inject secrets using environment variables
 
+The connection string will contain values that we do not want to commit to version control - e.g. the user- name and the password of our database root user.
+Our best option is to use environment variables as a way to inject secrets at runtime into the application environment. DigitalOcean’s apps, for example, can refer to the DATABASE_URL environment variable (or a few others for a more granular view) to get the database connection string at runtime.
+
+This allows us to customize any value in our Settings struct using environment variables, overriding what is specified in our configuration files.
+Why is that convenient?
+It makes it possible to inject values that are too dynamic (i.e. not known a priori) or too sensitive to be stored in version control.
+It also makes it fast to change the behaviour of our application: we do not have to go through a full re-build if we want to tune one of those values (e.g. the database port). For languages like Rust, where a fresh build can take ten minutes or more, this can make the difference between a short outage and a substantial service degradation with customer-visible impact.
+
+Before we move on let’s take care of an annoying detail: environment variables are strings for the config crate and it will fail to pick up integers if using the standard deserialization routine from serde. Luckily enough, we can specify a custom deserialization function.
+
+Let’s add a new dependency, serde-aux (serde auxiliary) and let’s modify both ApplicationSettings and DatabaseSettings
+
+# February 23, 2023 
+
+#### Connecting to Digital Ocean's Postgres Instance
 
 
