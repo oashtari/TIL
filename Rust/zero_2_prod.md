@@ -9,7 +9,7 @@
 [2/20/23](#february-20-2023)<br>
 [2/21/23](#february-21-2023)<br>
 [2/22/23](#february-22-2023)<br>
-[2/23/23](#february-23-2023)<br>
+[2/24/23](#february-24-2023)<br>
 
 [previous week](/React/template_files.md)
 
@@ -1091,8 +1091,84 @@ Before we move on let’s take care of an annoying detail: environment variables
 
 Let’s add a new dependency, serde-aux (serde auxiliary) and let’s modify both ApplicationSettings and DatabaseSettings
 
-# February 23, 2023 
+# February 24, 2023 
 
 #### Connecting to Digital Ocean's Postgres Instance
 
+Let’s have a look at the connection string of our database using DigitalOcean’s dashboard (Components -> Database):
+
+                postgresql://newsletter:<PASSWORD>@<HOST>:<PORT>/newsletter?sslmode=require
+
+Our current DatabaseSettings does not handle SSL mode - it was not relevant for local development, but it is more than desirable to have transport-level encryption for our client/database communication in pro- duction.
+Before trying to add new functionality, let’s make room for it by refactoring DatabaseSettings.
+
+We will change its two methods to return a PgConnectOptions instead of a connection string: it will make it easier to manage all these moving parts.
+
+We’ll also have to update src/main.rs and tests/health_check.rs:
+
+Let’s now add the require_ssl property we need to DatabaseSettings:
+
+                #[derive(serde::Deserialize)] pub struct DatabaseSettings {
+                        // [...]
+                        // Determine if we demand the connection to be encrypted or not
+                        pub require_ssl: bool,
+                }
+
+We want require_ssl to be false when we run the application locally (and for our test suite), but true in our production environment.
+
+We can take the opportunity - now that we are using PgConnectOptions - to tune sqlx’s instrumentation: lower their logs from INFO to TRACE level.
+This will eliminate the noise we noticed in the previous chapter.
+
+#### Environment variables in the App Spec
+
+One last step: we need to amend our spec.yaml manifest to inject the environment variables we need. (in spec.yaml)
+
+The scope is set to RUN_TIME to distinguish between environment variables needed during our Docker build process and those needed when the Docker image is launched.
+We are populating the values of the environment variables by interpolating what is exposed by the Digital Ocean’s platform (e.g. ${newsletter.PORT}) - refer to their documentation for more details.
+
+Let's apply the new spec.
+
+                # You can retrieve your app id using `doctl apps list`
+                doctl apps update YOUR-APP-ID --spec=spec.yaml
+
+and push our change up to GitHub to trigger a new deployment.
+
+We now need to migrate the database6:
+
+                DATABASE_URL=YOUR-DIGITAL-OCEAN-DB-CONNECTION-STRING sqlx migrate run
+
+Let’s fire off a POST request to /subscriptions:
+
+                curl --request POST \
+                --data 'name=le%20guin&email=ursula_le_guin%40gmail.com' \
+                https://zero2prod-adqrw.ondigitalocean.app/subscriptions \
+                --verbose
+
+
+### Reject invalid subscribers
+
+#### Requirements -- domain constrants, security constraints
+
+Let’s get to the point - what validation should we perform on names to improve our security posture given the class of threats we identified?
+I suggest:
+        • Enforcingamaximumlength.WeareusingTEXTastypeforouremailinPostgres,whichisvirtually unbounded - well, until disk storage starts to run out. Names come in all shapes and forms, but 256 characters should be enough for the greatest majority of our users4 - if not, we will politely ask them to enter a nickname.
+        • Rejectnamescontainingtroublesomecharacters./()"<>\{}arefairlycommoninURLs,SQLquer- ies and HTML fragments - not as much in names5. Forbidding them raises the complexity bar for SQL injection and phishing attempts.
+
+First implementation can use:
+
+                // An extension trait to provide the `graphemes` method // on `String` and `&str`
+                use unicode_segmentation::UnicodeSegmentation;
+
+#### Validation is a leaky cauldron
+
+What we need is a parsing function - a routine that accepts unstructured input and, if a set of conditions holds, returns us a more structured output, an output that structurally guarantees that the invariants we care about hold from that point onwards...by Using Types.
+
+#### Type drive development
+
+Type-driven development is a powerful approach to encode the constraints of a domain we are trying to model inside the type system, leaning on the compiler to make sure they are enforced.
+The more expressive the type system of our programming language is, the tighter we can constrain our code to only be able to represent states that are valid in the domain we are working in.
+
+Rust has not invented type-driven development - it has been around for a while, especially in the functional programming communities (Haskell, F#, OCaml, etc.). Rust “just” provides you with a type-system that is expressive enough to leverage many of the design patterns that have been pioneered in those languages in the past decades. The particular pattern we have just shown is often referred to as the “new-type pattern” in the Rust community.
+
+#### Ownerhip meets invariants
 
