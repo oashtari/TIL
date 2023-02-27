@@ -10,6 +10,7 @@
 [2/21/23](#february-21-2023)<br>
 [2/22/23](#february-22-2023)<br>
 [2/24/23](#february-24-2023)<br>
+[2/27/23](#february-27-2023)<br>
 
 [previous week](/React/template_files.md)
 
@@ -1169,6 +1170,8 @@ Type-driven development is a powerful approach to encode the constraints of a do
 The more expressive the type system of our programming language is, the tighter we can constrain our code to only be able to represent states that are valid in the domain we are working in.
 
 Rust has not invented type-driven development - it has been around for a while, especially in the functional programming communities (Haskell, F#, OCaml, etc.). Rust “just” provides you with a type-system that is expressive enough to leverage many of the design patterns that have been pioneered in those languages in the past decades. The particular pattern we have just shown is often referred to as the “new-type pattern” in the Rust community.
+
+# February 27, 2023 
 
 #### Ownerhip meets invariants
 
