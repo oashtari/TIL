@@ -1,5 +1,8 @@
 [2/27/23](#february-27-2023)<br>
 [2/28/23](#february-28-2023)<br>
+[3/01/23](#march-1-2023)<br>
+[3/02/23](#march-2-2023)<br>
+[3/03/23](#march-3-2023)<br>
 
 # February 27, 2023 
 
@@ -62,6 +65,82 @@ burntsushi put it down quite neatly in a Reddit thread a few years ago:
 Adopting this viewpoint we can understand what is happening: when our request handler panics actix- web assumes that something horrible happened and immediately drops the worker that was dealing with that panicking request.7
 If panics are not the way to go, what should we use to handle recoverable errors?
 
+# March 1, 2023 
+
 #### Errors as Values -- Result
 
+Rust’s primary error handling mechanism is built on top of the Result type:
+
+    pub enum Result<T, E> { 
+        Ok(T),
+        Err(E), 
+    }
+
+Result is used as the return type for fallible operations: if the operation succeeds, Ok(T) is returned; if it fails, you get Err(E).
+
+It tells us that inserting a subscriber in the database is a fallible operation - if all goes as planned, we don’t get anything back (() - the unit type), if something is amiss we will instead receive a sqlx::Error with details about what went wrong (e.g. a connection issue).
+
+Errors as values, combined with Rust’s enums, are awesome building blocks for a robust error handling story.
+
+#### Insightful Assertion Erros: claim
+
+claim provides a fairly comprehensive range of assertions to work with common Rust types - in particular Option and Result.
+
+#### Unit tests
+
+claim needs our type to implement the Debug trait to provide those nice error messages. Let’s add a #[de- rive(Debug)] attribute on top of SubscriberName:
+
+#### Handling a Result, match and ? operator
+
+? was introduced in Rust 1.13 - it is syntactic sugar.
+It reduces the amount of visual noise when you are working with fallible functions and you want to “bubble up” failures (e.g. similar enough to re-throwing a caught exception).
+
+It allows us to return early when something fails using a single character instead of a multi-line block. Given that ? triggers an early return using an Err variant, it can only be used within a function that returns
+a Result. subscribe does not qualify (yet).
+
+#### The email format
+
+How do we establish if an email address is “valid”?
+There are a few Request For Comments (RFC) by the Internet Engineering Task Force (IETF) outlining the expected structure of an email address - RFC 6854, RFC 5322, RFC 2822. We would have to read them, digest the material and then come up with an is_valid_email function that matches the specification. Unless you have a keen interest in understanding the subtle nuances of the email address format, I would suggest you to take a step back: it is quite messy. So messy that even the HTML specification is willfully non-compliant with the RFCs we just linked.
+Our best shot is to look for an existing library that has stared long and hard at the problem to provide us with a plug-and-play solution. Luckily enough, there is at least one in the Rust ecosystem - the validator crate!
+
+Our parse method will just delegate all the heavy-lifting to validator::validate_email:
+
+#### Property Based Testing
+
+We could use another approach to test our parsing logic: instead of verifying that a certain set of inputs is correctly parsed, we could build a random generator that produces valid values and check that our parser does not reject them.
+
+In other words, we verify that our implementation displays a certain property - “No valid email address is rejected”.
+
+This approach is often referred to as property-based testing.
+
+If we were working with time, for example, we could repeatedly sample three random integers
+    • H, between 0 and 23 (inclusive); 
+    • M, between 0 and 59 (inclusive); 
+    • S, between 0 and 59 (inclusive);
+and verify that H:M:S is always correctly parsed.
+
+Property-based testing significantly increases the range of inputs that we are validating, and therefore our confidence in the correctness of our code, but it does not prove that our parser is correct - it does not exhaust- ively explore the input space (except for tiny ones).
+
+Let’s see what property testing would look like for our SubscriberEmail.
+
+#### How to generate a random test with fake
+
+fake provides generation logic for both primitive data types (integers, floats, strings) and higher-level objects (IP addresses, country codes, etc.) - in particular, emails! Let’s add fake as a development dependency of our project:
+
+Every time we run our test suite, SafeEmail().fake() generates a new random valid email which we then use to test our parsing logic.
+This is already a major improvement compared to a hard-coded valid email, but we would have to run our test suite several times to catch an issue with an edge case. A fast-and-dirty solution would be to add a for loop to the test, but, once again, we can use this as an occasion to delve deeper and explore one of the available testing crates designed around property-based testing.
+
+#### Getting start with quickcheck
+
+
+
+
+
+
+
+
+# March 2, 2023 
+
+# March 3, 2023 
 
