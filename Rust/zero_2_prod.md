@@ -1,5 +1,5 @@
-[week of 2/06/23](/Rust/week_of_2_06_23.md)
-[week of 2/13/23](/Rust/week_of_2_13_23.md)
-[week of 2/20/23](/Rust/week_of_2_20_23.md)
-[week of 2/27/23](/Rust/week_of_2_27_23.md)
+[week of 2/06/23](/Rust/week_of_2_06_23.md)<br>
+[week of 2/13/23](/Rust/week_of_2_13_23.md)<br>
+[week of 2/20/23](/Rust/week_of_2_20_23.md)<br>
+[week of 2/27/23](/Rust/week_of_2_27_23.md)<br> 
 [previous week](/React/template_files.md)
