@@ -12,10 +12,10 @@
 [2/24/23](#february-24-2023)<br>
 [2/28/23](#february-28-2023)<br>
 
-[week of 2/27/23](/week_of_2_27_23.md)
-
+[week of 2/27/23](/Rust/week_of_2_27_23.md)
+/Users/omid/TIL/TIL/Rust/week_of_2_27_23.md
 [previous week](/React/template_files.md)
-
+/Users/omid/TIL/TIL/React/template_files.md
 # February 8, 2023 
 
 ## Setup
