@@ -133,13 +133,64 @@ This is already a major improvement compared to a hard-coded valid email, but we
 
 #### Getting start with quickcheck
 
+quickcheck calls prop in a loop with a configurable number of iterations (100 by default): on every iteration, it generates a new Vec<u32> and checks that prop returned true.
+If prop returns false, it tries to shrink the generated input to the smallest possible failing example (the shortest failing vector) to help us debug what went wrong.
 
+Everything is built on top of quickcheck’s Arbitrary trait:
 
+We have two methods:
+    • arbitrary: given a source of randomness (g) it returns an instance of the type;
+    • shrink: it returns a sequence of progressively “smaller” instances of the type to help quickcheck find
+    the smallest possible failure case.
 
+Vec<u32> implements Arbitrary, therefore quickcheck knows how to generate random u32 vectors.
 
+We need to create our own type, let’s call it ValidEmailFixture, and implement Arbitrary for it.
 
+If you look at Arbitrary’s trait definition, you’ll notice that shrinking is optional: there is a default imple- mentation (using empty_shrinker) which results in quickcheck outputting the first failure encountered, without trying to make it any smaller or nicer. Therefore we only need to provide an implementation of Arbitrary::arbitrary for our ValidEmailFixture.
 
+Let’s add both quickcheck and quickcheck-macros as development dependencies:
 
+This is an amazing example of the interoperability you gain by sharing key traits across the Rust ecosystem. How do we get fake and quickcheck to play nicely together?
+In Arbitrary::arbitrary we get g as input, an argument of type G.
+G is constrained by a trait bound, G: quickcheck::Gen, therefore it must implement the Gen trait in quickcheck, where Gen stands for “generator”.
+How is Gen defined?
+
+Anything that implements Gen must also implement the RngCore trait from rand-core.
+Let’s examine the SafeEmail faker: it implements the Fake trait.
+Fake gives us a fake method, which we have already tried out, but it also exposes a fake_with_rng method, where “rng” stands for “random number generator”.
+What does fake accept as a valid random number generator?
+
+You read that right - any type that implements the Rng trait from rand, which is automatically implemented by all types implementing RngCore!
+We can just pass g from Arbitrary::arbitrary as the random number generator for fake_with_rng and everything just works!
+Maybe the maintainers of the two crates are aware of each other, maybe they aren’t, but a community- sanctioned set of traits in rand-core gives us painless interoperability. Pretty sweet!
+
+#### Payload validation -- refactoring with TryFrom
+
+The refactoring gives us a clearer separation of concerns:
+    • parse_subscriber takes care of the conversion from our wire format (the url-decoded data collected from a HTML form) to our domain model (NewSubscriber);
+    • subscribe remains in charge of generating the HTTP response to the incoming HTTP request.
+
+The Rust standard library provides a few traits to deal with conversions in its std::convert sub-module. That is where AsRef comes from!
+Is there any trait there that captures what we are trying to do with parse_subscriber?
+AsRef is not a good fit for what we are dealing with here: a fallible conversion between two types which consumes the input value.
+We need to look at TryFrom:
+
+Replace T with FormData, Self with NewSubscriber and Self::Error with String - there you have it, the signature of our parse_subscriber function!
+
+We implemented TryFrom, but we are calling .try_into? What is happening there? There is another conversion trait in the standard library, called TryInto:
+
+Its signature mirrors the one of TryFrom - the conversion just goes in the other direction!
+If you provide a TryFrom implementation, your type automatically gets the corresponding TryInto imple- mentation, for free.
+
+try_into takes self as first argument, which allows us to do form.0.try_into() instead of going for NewS- ubscriber::try_from(form.0) - matter of taste, if you want.
+
+Generally speaking, what do we gain by implementing TryFrom/TryInto? Nothing shiny, no new functionality - we are “just” making our intent clearer. We are spelling out “This is a type conversion!”.
+
+Why does it matter? It helps others!
+When another developer with some Rust exposure jumps in our codebase they will immediately spot the conversion pattern because we are using a trait that they are already familiar with.
+
+ 
 # March 2, 2023 
 
 # March 3, 2023 
