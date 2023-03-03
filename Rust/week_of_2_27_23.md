@@ -193,5 +193,113 @@ When another developer with some Rust exposure jumps in our codebase they will i
  
 # March 2, 2023 
 
+Physical recovery day. :(
+
 # March 3, 2023 
 
+### Rejevt invalid subscribers #2
+
+#### How to write a REST client using reqwest
+
+To talk with a REST API we need an HTTP client.
+There are a few different options in the Rust ecosystem: synchronous vs asynchronous, pure Rust vs bind- ings to an underlying native library, tied to tokio or async-std, opinionated vs highly customisable, etc.
+We will go with the most popular option on crates.io: reqwest. What to say about reqwest?
+    • It has been extensively battle-tested(~8.5milliondownloads);
+    • It offers a primarily asynchronous interface, with the option to enable a synchronous one via the
+    blocking feature flag;
+    • It relies on tokio as its asynchronous executor,matching what we are already using due toactix-web; 
+    • It does not depend on any system library if you choose to use rustls to back the TLS implementation
+    (rustls-tls feature flag instead of default-tls), making it extremely portable.
+
+It is the HTTP client we used to fire off requests at our API in the integration tests. Let’s lift it from a development dependency to a runtime dependency:
+
+The main type you will be dealing with when working with reqwest is reqwest::Client - it exposes all the methods we need to perform requests against a REST API.
+
+Let’s add two fields to EmailClient:
+    • http_client, to store a Client instance;
+    • base_url, to store the URL of the API we will be making requests to.
+
+#### Connection pooling
+
+Before executing an HTTP request against an API hosted on a remote server we need to establish a connec- tion.
+
+reqwest is no different - every time a Client instance is created reqwest initialises a connection pool under the hood.
+
+To leverage this connection pool we need to reuse the same Client across multiple requests.
+It is also worth pointing out that Client::clone does not create a new connection pool - we just clone a pointer to the underlying pool.
+
+#### How to reuse the same reqwest::Client in actix-web
+
+To re-use the same HTTP client across multiple requests in actix-web we need to store a copy of it in the application context - we will then be able to retrieve a reference to Client in our request handlers using an extractor (e.g. actix_web::web::Data).
+
+
+We have two options:
+    • derive the Clone trait for EmailClient, build an instance of it once and then pass a clone to app_data every time we need to build an App:
+    • wrap EmailClient in actix_web::web::Data(anArcpointer) and pass a pointer to app_data every time we need to build an App - like we are doing with PgPool:
+
+If EmailClient were just a wrapper around a Client instance, the first option would be preferable - we avoid wrapping the connection pool twice with Arc.
+This is not the case though: EmailClient has two data fields attached (base_url and sender). The first implementation allocates new memory to hold a copy of that data every time an App instance is created, while the second shares it among all App instances.
+That’s why we will be using the second strategy.
+
+#### Configuring our EmailClient
+
+We are building the dependencies of our application using the values specified in the configuration we re- trieved via get_configuration.
+
+To build an EmailClient instance we need the base URL of the API we want to fire requests to and the sender email address - let’s add them to our Settings struct:
+
+We then need to set values for them in our configuration files: base.yaml, production.yaml
+
+We can now build an EmailClient instance in main and pass it to the run function:
+
+#### How to test a REST client
+
+We have gone through most of the setup steps: we sketched an interface for EmailClient and we wired it up with the application, using a new configuration type - EmailClientSettings.
+To stay true to our test-driven development approach, it is now time to write a test!
+We could start from our integration tests: change the ones for POST /subscriptions to make sure that the endpoint conforms to our new requirements.
+It would take us a long time to turn them green though: apart from sending an email, we need to add logic to generate a unique token and store it.
+Let’s start smaller: we will just test our EmailClient component in isolation.
+It will boost our confidence that it behaves as expected when tested as a unit, reducing the number of issues we might encounter when integrating it into the larger confirmation email flow.
+It will also give us a chance to see if the interface we landed on is ergonomic and easy to test.
+What should we actually test though?
+The main purpose of our EmailClient::send_email is to perform an HTTP call: how do we know if it happened? How do we check that the body and the headers were populated as we expected?
+We need to intercept that HTTP request - time to spin up a mock server!
+
+#### HTTP mocking with wireMock
+
+Using wiremock, we can write send_email_fires_a_request_to_base_url 
+
+wiremock::MockServer is a full blown HTTP server
+
+MockServer::start asks the operating system for a random available port and spins up the server on a back- ground thread, ready to listen for incoming requests.
+How do we point our email client to our mock server? We can retrieve the address of the mock server using the MockServer::uri method; we can then pass it as base_url to EmailClient::new:
+let email_client = EmailClient::new(mock_server.uri(), sender);
+
+Out of the box, wiremock::MockServer returns 404 Not Found to all incoming requests. We can instruct the mock server to behave differently by mounting a Mock.
+
+When wiremock::MockServer receives a request, it iterates over all the mounted mocks to check if the re- quest matches their conditions.
+The matching conditions for a mock are specified using Mock::given.
+We are passing any() to Mock::Given which, according to wiremock’s documentation,
+
+    Match all incoming requests, regardless of their method, path, headers or body. You can use it to
+    verify that a request has been fired towards the server, without making any other assertion about it.
+
+Basically, it always matches, regardless of the request - which is what we want here!
+When an incoming request matches the conditions of a mounted mock, wiremock::MockServer returns a response following what was specified in respond_with.
+We passed ResponseTemplate::new(200) - a 200 OK response without a body.
+A wiremock::Mock becomes effective only after it has been mounted on a wiremock::Mockserver - that’s what our call to Mock::mount is about.
+
+#### The intent of a test should be clear
+
+A reader, skimming the test code, should be able to identify easily the property that we are trying to test. Using random data conveys a specific message: do not pay attention to these inputs, their values do not influence the outcome of the test, that’s why they are random!
+
+Hard-coded values, instead, should always give you pause: does it matter that subscriber_email is set to marco@gmail.com? Should the test pass if I set it to another value?
+In a test like ours, the answer is obvious. In a more intricate setup, it often isn’t.
+
+#### Mock expectations
+
+What does .expect(1) do?
+It sets an expectation on our mock: we are telling the mock server that during this test it should receive exactly one request that matches the conditions set by this mock.
+We could also use ranges for our expectations - e.g. expect(1..) if we want to see at least one request, expect(1..=3) if we expect at least one request but no more than three, etc.
+Expectations are verified when MockServer goes out of scope - at the end of our test function, indeed! Before shutting down, MockServer will iterate over all the mounted mocks and check if their expectations have been verified. If the verification step fails, it will trigger a panic (and fail the test).
+
+#### First sketch of EmailClient::send_email
