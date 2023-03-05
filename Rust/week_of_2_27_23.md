@@ -357,7 +357,31 @@ A string slice is a just pointer to a memory buffer owned by somebody else. To s
 
 That’s it, quick and painless - serde does all the heavy lifting for us and we are left with more performant code!
 
-### Dealing with Failures -- error status codes, timeouts, refactoring test helpers, refactoring: fail fast
+#### Dealing with Failures -- error status codes, timeouts, refactoring test helpers, refactoring: fail fast
+
+### Test suite
+
+#### One test file, one crate
+
+Before we start moving things around, let’s nail down a few facts about integration testing in Rust. The tests folder is somewhat special - cargo knows to look into it searching for integration tests.
+Each file within the tests folder gets compiled as its own crate.
+
+We can check this out by running cargo build --tests and then looking under target/debug/deps:
+
+        # Build test code, without running tests
+        cargo build --tests
+        # Find all files with a name starting with `health_check`
+        ls target/debug/deps | grep health_check
+
+The trailing hashes will likely be different on your machine, but there should be two entries starting with health_check-*.
+
+        ./target/debug/deps/health_check-fc23645bf877da35
+
+That’s right, it runs our integration tests!
+If we had five *.rs files under tests, we’d find five executables in target/debug/deps.
+
+#### Sharing test helpers
+
 
 
 
