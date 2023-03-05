@@ -2,7 +2,7 @@
 [2/28/23](#february-28-2023)<br>
 [3/01/23](#march-1-2023)<br>
 [3/02/23](#march-2-2023)<br>
-[3/03/23](#march-3-2023)<br>
+[3/05/23](#march-5-2023)<br>
 
 # February 27, 2023 
 
@@ -302,4 +302,65 @@ It sets an expectation on our mock: we are telling the mock server that during t
 We could also use ranges for our expectations - e.g. expect(1..) if we want to see at least one request, expect(1..=3) if we expect at least one request but no more than three, etc.
 Expectations are verified when MockServer goes out of scope - at the end of our test function, indeed! Before shutting down, MockServer will iterate over all the mounted mocks and check if their expectations have been verified. If the verification step fails, it will trigger a panic (and fail the test).
 
-#### First sketch of EmailClient::send_email
+# March 5, 2023 
+
+#### First sketch of EmailClient::send_email -- reqwest::Client::post
+
+reqwest::Client exposes a post method - it takes the URL we want to call with a POST request as argument and it returns a RequestBuilder.
+RequestBuilder gives us a fluent API to build out the rest of the request we want to send, piece by piece.
+
+JSON body -- We can encode the request body schema as a struct:
+
+If the json feature flag for reqwest is enabled (as we did), builder will expose a json method that we can leverage to set request_body as the JSON body of the request:
+
+The json method goes a bit further than simple serialization: it will also set the Content-Type header to application/json - matching what we saw in the example!
+
+#### Authorization Token
+
+We are almost there - we need to add an authorization header, X-Postmark-Server-Token, to the request. Just like the sender email address, we want to store the token value as a field in EmailClient.
+
+Let’s amend EmailClient::new and EmailClientSettings:
+
+#### Executing the request
+
+We have all the ingredients - we just need to fire the request now! We can use the send method:
+
+send is asynchronous, therefore we need to await the future it returns.
+send is also a fallible operation - e.g. we might fail to establish a connection to the server. We’d like to return an error if send fails - that’s why we use the ? operator.
+
+The error variant returned by send is of type reqwest::Error, while our send_email uses String as error type. The compiler has looked for a conversion (an implementation of the From trait), but it could not find any - therefore it errors out.
+If you recall, we used String as error variant mostly as a placeholder - let’s change send_email’s signature to return Result<(), reqwest::Error>.
+
+#### Tightening our happy test
+
+any is not the only matcher offered by wiremock out of the box: there are handful available in wiremock’s matchers module.
+We can use header_exists to verify that the X-Postmark-Server-Token is set on the request to the server:
+
+We can chain multiple matchers together using the and method.
+Let’s add header to check that the Content-Type is set to the correct value, path to assert on the endpoint being called and method to verify the HTTP verb:
+
+We could use body_json to match exactly the request body.
+We probably do not need to go as far as that - it would be enough to check that the body is valid JSON and it contains the set of field names shown in Postmark’s example.
+There is no out-of-the-box matcher that suits our needs - we need to implement our own!
+wiremock exposes a Match trait - everything that implements it can be used as a matcher in given and and.
+
+We get the incoming request as input, request, and we need to return a boolean value as output: true, if the mock matched, false otherwise.
+We need to deserialize the request body as JSON - let’s add serde-json to the list of our development dependencies:
+
+It seems we forgot about the casing requirement - field names must be pascal cased! We can fix it easily by adding an annotation on SendEmailRequest:
+
+#### Refactoring, avoid unnecessary memory allocation
+
+For each field we are allocating a bunch of new memory to store a cloned String - it is wasteful. It would be more efficient to reference the existing data without performing any additional allocation.
+We can pull it off by restructuring SendEmailRequest: instead of String we have to use a string slice (&str) as type for all fields.
+A string slice is a just pointer to a memory buffer owned by somebody else. To store a reference in a struct we need to add a lifetime parameter: it keeps track of how long those references are valid for - it’s the compiler’s job to make sure that references do not stay around longer than the memory buffer they point to!
+
+That’s it, quick and painless - serde does all the heavy lifting for us and we are left with more performant code!
+
+### Dealing with Failures -- error status codes, timeouts, refactoring test helpers, refactoring: fail fast
+
+
+
+
+
+
