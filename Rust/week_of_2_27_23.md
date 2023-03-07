@@ -380,11 +380,3 @@ The trailing hashes will likely be different on your machine, but there should b
 That’s right, it runs our integration tests!
 If we had five *.rs files under tests, we’d find five executables in target/debug/deps.
 
-#### Sharing test helpers
-
-
-
-
-
-
-
