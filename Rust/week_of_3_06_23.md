@@ -474,5 +474,7 @@ We can visualise this mental model using a 2x2 table with Location as columns an
 
 We will spend the rest of the chapter improving our error handling strategy for each of the cells in the table.
 
+# March 8, 2023 
+
 #### Error reporting for operators
 
