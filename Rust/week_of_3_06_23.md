@@ -394,3 +394,85 @@ Go ahead and deploy the application: seeing a feature working in a live environm
 # March 7, 2023 
 
 ## Error Handling
+
+In Chapter 6 we discussed the building blocks of error handling in Rust - Result and the ? operator.
+We left many questions unanswered: how do errors fit within the broader architecture of our application? What does a good error look like? Who are errors for? Should we use a library? Which one?
+An in-depth analysis of error handling patterns in Rust will be the sole focus of this chapter.
+
+### What is the purpose of errors?
+
+We are trying to insert a row into the subscription_tokens table in order to store a newly-generated token against a subscriber_id.
+execute is a fallible operation: we might have a network issue while talking to the database, the row we are trying to insert might violate some table constraints (e.g. uniqueness of the primary key), etc.
+
+#### Internal errors -- enable the caller to react
+
+The caller of execute most likely wants to be informed if a failure occurs - they need to react accordingly, e.g. retry the query or propagate the failure upstream using ?, as in our example.
+Rust leverages the type system to communicate that an operation may not succeed: the return type of execute is Result, an enum.
+
+The caller is then forced by the compiler to express how they plan to handle both scenarios - success and failure.
+If our only goal was to communicate to the caller that an error happened, we could use a simpler definition for Result:
+
+There would be no need for a generic Error type - we could just check that execute returned the Err variant, e.g.
+
+        let outcome = sqlx::query!(/* ... */) .execute(transaction)
+        .await;
+        if outcome == ResultSignal::Err { // Do something if it failed }
+
+This works if there is only one failure mode. Truth is, operations can fail in multiple ways and we might want to react differently depending on what happened.
+Let’s look at the skeleton of sqlx::Error, the error type for execute:
+
+sqlx::Error is implemented as an enum to allow users to match on the returned error and behave differently depending on the underlying failure mode. For example, you might want to retry a PoolTimedOut while you will probably give up on a ColumnNotFound.
+
+#### Help an operator to troubleshoot
+
+What if an operation has a single failure mode - should we just use () as error type?
+Err(()) might be enough for the caller to determine what to do - e.g. return a 500 Internal Server Error
+to the user.
+But control flow is not the only purpose of errors in an application.
+We expect errors to carry enough context about the failure to produce a report for an operator (e.g. the developer) that contains enough details to go and troubleshoot the issue.
+What do we mean by report?
+In a backend API like ours it will usually be a log event.
+In a CLI it could be an error message shown in the terminal when a --verbose flag is used.
+The implementation details may vary, the purpose stays the same: help a human understand what is going wrong.
+
+#### Errors at the edge
+
+Just like operators, users expect the API to signal when a failure mode is encountered.
+What does a user of our API see when store_token fails? We can find out by looking at the request handler:
+
+They receive an HTTP response with no body and a 500 Internal Server Error status code.
+The status code fulfills the same purpose of the error type in store_token: it is a machine-parsable piece of information that the caller (e.g. the browser) can use to determine what to do next (e.g. retry the request assuming it’s a transient failure).
+What about the human behind the browser? What are we telling them?
+Not much, the response body is empty.
+That is actually a good implementation: the user should not have to care about the internals of the API they are calling - they have no mental model of it and no way to determine why it is failing. That’s the realm of the operator.
+We are omitting those details by design.
+
+#### Summary
+
+Let’s summarise what we uncovered so far. Errors serve two1 main purposes:
+    • Controlflow(i.e.determinewhatdonext);
+    • Reporting(e.g.investigate,afterthefact,whatwentwrongon).
+
+We can also distinguish errors based on their location:
+    • Internal(i.e.afunctioncallinganotherfunctionwithinourapplication); 
+    • Attheedge(i.e.anAPIrequestthatwefailedtofulfill).
+
+Control flow is scripted: all information required to take a decision on what to do next must be accessible to a machine.
+We use types (e.g. enum variants), methods and fields for internal errors.
+We rely on status codes for errors at the edge.
+
+Error reports, instead, are primarily consumed by humans.
+The content has to be tuned depending on the audience.
+An operator has access to the internals of the system - they should be provided with as much context as possible on the failure mode.
+
+A user sits outside the boundary of the application2: they should only be given the amount of information
+required to adjust their behaviour if necessary (e.g. fix malformed inputs).
+We can visualise this mental model using a 2x2 table with Location as columns and Purpose as rows:
+                Internal                        At the edge
+    Control     Flow Types, methods, fields     Status codes
+    Reporting   Logs/traces                     Response body
+
+We will spend the rest of the chapter improving our error handling strategy for each of the cells in the table.
+
+#### Error reporting for operators
+
