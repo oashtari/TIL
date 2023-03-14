@@ -476,5 +476,10 @@ We will spend the rest of the chapter improving our error handling strategy for 
 
 # March 8, 2023 
 
-#### Error reporting for operators
+Discovered discrepancy in code from book, tracing and correcting.
+
+# March 9, 2023
+
+SIGH...still stuck on a bug that I cannot find the solution for...it is now March 13 :(
+
 
