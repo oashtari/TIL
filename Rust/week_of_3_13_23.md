@@ -2,9 +2,6 @@
 [3/14/23](#march-14-2023)<br>
 [3/15/23](#march-15-2023)<br>
 [3/16/23](#march-16-2023)<br>
-[3/17/23](#march-17-2023)<br>
-[3/18/23](#march-18-2023)<br>
-[3/19/23](#march-19-2023)<br>
 
 # March 13, 2023 
 
@@ -83,10 +80,3 @@ We can visualise this mental model using a 2x2 table with Location as columns an
 Control Flow        Types, methods, fields  Status codes
 Reporting           Logs/traces             Response body
 
-### Error reporting for operators
-
-
-
-# March 17, 2023 
-# March 18, 2023 
-# March 19, 2023 
