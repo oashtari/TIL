@@ -474,6 +474,10 @@ Authenticate with
 
                 doctl auth init
 
+                can renew auth with new token with:
+
+                doctl auth init --access-token "Dig Ocean token" (https://github.com/digitalocean/doctl/issues/281)
+
 Create the application:
 
                 doctl apps create --spec spec.yaml
@@ -565,6 +569,7 @@ Let’s fire off a POST request to /subscriptions:
                 --data 'name=le%20guin&email=ursula_le_guin%40gmail.com' \
                 https://zero2prod-adqrw.ondigitalocean.app/subscriptions \
                 --verbose
+
 
 
 ### Reject invalid subscribers
