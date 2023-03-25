@@ -10,7 +10,17 @@
 Persian new year.
 
 # March 22, 2023 
+
+Stuck on a new bug.
+Satrted [Comprehensive Rust](https://google.github.io/comprehensive-rust/) until I'm able to get some help with the bug.
+
 # March 23, 2023 
+
+A few more lessons in Comprehensive Rust.
+
 # March 24, 2023 
+
+Got my very experienved dev friend to try and solve the bug...he couldn't, contemplating what to do next about this project. My friend, ChatGPT, and a ton of internet searches have lead nowhere, and the book does not have any guidance on what to do when stuck on something like this.
+
 # March 25, 2023 
 # March 26, 2023 
