@@ -11,3 +11,7 @@
 Finished day 1 of comprehensive Rust tutorial, including exercises.
 
 # March 28, 2023 
+
+Finished day 2: morning of comprhensive Rust.
+
+# March 29, 2023
