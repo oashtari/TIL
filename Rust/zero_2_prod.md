@@ -7,6 +7,7 @@
 [week of 3/20/23](/Rust/week_of_3_20_23.md)<br> 
 [week of 3/27/23](/Rust/week_of_3_27_23.md)<br> 
 [week of 4/03/23](/Rust/week_of_4_03_23.md)<br> 
+[week of 4/10/23](/Rust/week_of_4_10_23.md)<br> 
 [previous week](/React/template_files.md)
 
 to check all ports: lsof -i -P | grep -i "listen"
