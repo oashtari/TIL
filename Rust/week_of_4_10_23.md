@@ -139,6 +139,8 @@ Here is a non-exhaustive list of what can be found by crawling subdomains:
 #### Errors
 
 For libraries, the current good practice is to use the [thiserror](https://crates.io/crates/thiserror) crate.
+
 For programs, the [anyhow](https://crates.io/crates/anyhow) crate is the recommended one. It will prettify errors returned by
 the main function.
+
 
