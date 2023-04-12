@@ -118,3 +118,27 @@ Sync and thus is safe to share across threads.
     rustup update
     cargo update
     cargo check
+
+# April 12, 2023
+
+
+[look for open-to-the-world services and machines.](https://www.shodan.io/)
+
+[certificate transparency logs](https://certificate.transparency.dev/howctworks/)
+
+[certificates for any site](https://crt.sh/) -- "%.kerkour.com"
+    A limitation of this technique is its inability to find non-HTTP(S) services (such as email or VPN servers), and wildcard subdomains ( *.kerkour.com , for example) which may obfuscate the actually used subdomains.
+
+Here is a non-exhaustive list of what can be found by crawling subdomains:
+    • Code repositories
+    • Forgotten subdomain subject to takeover • Admin panels
+    • Shared files
+    • Storage buckets
+    • Email / Chat servers
+
+#### Errors
+
+For libraries, the current good practice is to use the [thiserror](https://crates.io/crates/thiserror) crate.
+For programs, the [anyhow](https://crates.io/crates/anyhow) crate is the recommended one. It will prettify errors returned by
+the main function.
+
