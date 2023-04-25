@@ -139,3 +139,91 @@ Sometimes there is no good async alternative for a library or operation. If nece
 
 ## Requests
 
+you can ask Rocket to automatically validate:
+
+    The type of a dynamic path segment.
+    The type of several dynamic path segments.
+    The type of incoming body data.
+    The types of query strings, forms, and form values.
+    The expected incoming or outgoing format of a request.
+    Any arbitrary, user-defined security or validation policies.
+The route attribute and function signature work in tandem to describe these validations. Rocket's code generation takes care of actually validating the properties. This section describes how to ask Rocket to validate against all of these properties and more.
+
+#### Methods
+
+A Rocket route attribute can be any one of get, put, post, delete, head, patch, or options, each corresponding to the HTTP method to match against. For example, the following attribute will match against POST requests to the root path:
+
+        #[post("/")]
+
+#### Dynamic paths
+
+You can declare path segments as dynamic by using angle brackets around variable names in a route's path. For example, if we want to say Hello! to anything, not just the world, we can declare a route like so:
+
+        #[get("/hello/<name>")]
+        fn hello(name: &str) -> String {
+            format!("Hello, {}!", name)
+        }
+
+If we were to mount the path at the root (.mount("/", routes![hello])), then any request to a path with two non-empty segments, where the first segment is hello, will be dispatched to the hello route. For example, if we were to visit /hello/John, the application would respond with Hello, John!.
+
+Any number of dynamic path segments are allowed. A path segment can be of any type, including your own, as long as the type implements the FromParam trait. We call these types parameter guards. Rocket implements FromParam for many of the standard library types, as well as a few special Rocket types. For the full list of provided implementations, see the FromParam API docs. Here's a more complete route to illustrate varied usage:
+
+        #[get("/hello/<name>/<age>/<cool>")]
+        fn hello(name: &str, age: u8, cool: bool) -> String {
+            if cool {
+                format!("You're a cool {} year old, {}!", age, name)
+            } else {
+                format!("{}, we need to talk about your coolness.", name)
+            }
+        }
+
+#### Multiple segments
+
+You can also match against multiple segments by using <param..> in a route path. The type of such parameters, known as segments guards, must implement FromSegments. A segments guard must be the final component of a path: any text after a segments guard will result in a compile-time error.
+
+As an example, the following route matches against all paths that begin with /page:
+
+        use std::path::PathBuf;
+
+        #[get("/page/<path..>")]
+        fn get_page(path: PathBuf) { /* ... */ }
+
+The path after /page/ will be available in the path parameter, which may be empty for paths that are simply /page, /page/, /page//, and so on. The FromSegments implementation for PathBuf ensures that path cannot lead to path traversal attacks. With this, a safe and secure static file server can be implemented in just 4 lines:
+
+        use std::path::{Path, PathBuf};
+        use rocket::fs::NamedFile;
+
+        #[get("/<file..>")]
+        async fn files(file: PathBuf) -> Option<NamedFile> {
+            NamedFile::open(Path::new("static/").join(file)).await.ok()
+        }
+
+Tip: Rocket makes it even easier to serve static files!
+If you need to serve static files from your Rocket application, consider using FileServer, which makes it as simple as:
+
+rocket.mount("/public", FileServer::from("static/"))
+
+"In web development, static files refer to files such as HTML, CSS, JavaScript, images, and other types of files that are served to the client's web browser and do not change in response to user requests. These files are called "static" because they are pre-existing and are not generated dynamically by the server.
+
+In the code block you provided, FileServer is a struct provided by the Rocket web framework that serves static files. The from() method of FileServer takes a directory path as its argument, and mounts the directory at a given route.
+
+In the example code rocket.mount("/public", FileServer::from("static/")), a new FileServer instance is created that serves files from the "static/" directory, and this server is mounted to the "/public" route in the Rocket application. This means that any files in the "static/" directory can be accessed by clients by visiting URLs that start with "/public".
+
+By using FileServer, you can easily serve your static files without having to write additional code to handle file serving. This can make your code simpler and more concise, and can improve the performance of your application by reducing the load on your server."
+
+#### Ignored segments
+
+A component of a route can be fully ignored by using <_>, and multiple components can be ignored by using <_..>. In other words, the wildcard name _ is a dynamic parameter name that ignores that dynamic parameter. An ignored parameter must not appear in the function argument list. A segment declared as <_> matches anything in a single segment while segments declared as <_..> match any number of segments with no conditions.
+
+As an example, the foo_bar route below matches any GET request with a 3-segment URI that starts with /foo/ and ends with /bar. The everything route below matches every GET request.
+
+        #[get("/foo/<_>/bar")]
+        fn foo_bar() -> &'static str {
+            "Foo _____ bar!"
+        }
+
+        #[get("/<_..>")]
+        fn everything() -> &'static str {
+            "Hey, you're here."
+        }
+
