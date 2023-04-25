@@ -14,6 +14,9 @@
 [previous week](/React/template_files.md)
 
 to check all ports: lsof -i -P | grep -i "listen"
+check specific port: sudo lsof -nP -iTCP:$PORT | grep LISTEN
+kill port: sudo kill -9 <PID>
+
 [lsof commands](https://phoenixnap.com/kb/lsof-command)
 
 Digital Ocean

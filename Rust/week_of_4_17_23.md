@@ -1,6 +1,8 @@
 [4/17/23](#april-17-2023)<br>
 [4/18/23](#april-18-2023)<br>
 [4/19/23](#april-19-2023)<br>
+[4/20/23](#april-20-2023)<br>
+[4/21/23](#april-21-2023)<br>
 
 
 # April 17, 2023 
@@ -100,7 +102,9 @@ run: npm run start from www directory
 
 Anytime you make changes and want them reflected on http://localhost:8080/, just re-run the wasm-pack build command within the wasm-game-of-life directory.
 
+# April 20, 2023 
 
+Starting reading and working on Rocket for Rust.
 
-
+# April 21, 2023
 
