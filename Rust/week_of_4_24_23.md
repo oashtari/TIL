@@ -227,3 +227,123 @@ As an example, the foo_bar route below matches any GET request with a 3-segment 
             "Hey, you're here."
         }
 
+# April 26, 2023 
+
+#### Forwarding
+
+Let's take a closer look at this route attribute and signature pair from a previous example:
+
+
+        #[get("/hello/<name>/<age>/<cool>")]
+        fn hello(name: &str, age: u8, cool: bool) { /* ... */ }
+
+What if cool isn't a bool? Or, what if age isn't a u8? When a parameter type mismatch occurs, Rocket forwards the request to the next matching route, if there is any. This continues until a route doesn't forward the request or there are no remaining routes to try. When there are no remaining routes, a customizable 404 error is returned.
+
+Routes are attempted in increasing rank order. Rocket chooses a default ranking from -12 to -1, detailed in the next section, but a route's rank can also be manually set with the rank attribute. To illustrate, consider the following routes:
+
+        #[get("/user/<id>")]
+        fn user(id: usize) { /* ... */ }
+
+        #[get("/user/<id>", rank = 2)]
+        fn user_int(id: isize) { /* ... */ }
+
+        #[get("/user/<id>", rank = 3)]
+        fn user_str(id: &str) { /* ... */ }
+
+        #[launch]
+        fn rocket() -> _ {
+            rocket::build().mount("/", routes![user, user_int, user_str])
+        }
+
+Notice the rank parameters in user_int and user_str. If we run this application with the routes mounted at the root path, as is done in rocket() above, requests to /user/<id> (such as /user/123, /user/Bob, and so on) will be routed as follows:
+
+The user route matches first. If the string at the <id> position is an unsigned integer, then the user handler is called. If it is not, then the request is forwarded to the next matching route: user_int.
+
+The user_int route matches next. If <id> is a signed integer, user_int is called. Otherwise, the request is forwarded.
+
+The user_str route matches last. Since <id> is always a string, the route always matches. The user_str handler is called.
+
+#### Default ranking
+
+If a rank is not explicitly specified, Rocket assigns a default rank. The default rank prefers static segments over dynamic segments in both paths and queries: the more static a route's path and query are, the higher its precedence.
+
+There are three "colors" to paths and queries:
+
+    static, meaning all components are static
+    partial, meaning at least one component is dynamic
+    wild, meaning all components are dynamic
+
+Static paths carry more weight than static queries. The same is true for partial and wild paths. This results in the following default ranking table:
+
+#### Request guards
+
+Request guards are one of Rocket's most powerful instruments. As the name might imply, a request guard protects a handler from being called erroneously based on information contained in an incoming request. More specifically, a request guard is a type that represents an arbitrary validation policy. The validation policy is implemented through the FromRequest trait. Every type that implements FromRequest is a request guard.
+
+Request guards appear as inputs to handlers. An arbitrary number of request guards can appear as arguments in a route handler. Rocket will automatically invoke the FromRequest implementation for request guards before calling the handler. Rocket only dispatches requests to a handler when all of its guards pass.
+
+#### Custom guards
+
+You can implement FromRequest for your own types. For instance, to protect a sensitive route from running unless an ApiKey is present in the request headers, you might create an ApiKey type that implements FromRequest and then use it as a request guard:
+
+        #[get("/sensitive")]
+        fn sensitive(key: ApiKey) { /* .. */ }
+
+You might also implement FromRequest for an AdminUser type that authenticates an administrator using incoming cookies. Then, any handler with an AdminUser or ApiKey type in its argument list is assured to only be invoked if the appropriate conditions are met. Request guards centralize policies, resulting in a simpler, safer, and more secure applications.
+
+#### Guard transparency
+
+When a request guard type can only be created through its FromRequest implementation, and the type is not Copy, the existence of a request guard value provides a type-level proof that the current request has been validated against an arbitrary policy. This provides powerful means of protecting your application against access-control violations by requiring data accessing methods to witness a proof of authorization via a request guard. We call the notion of using a request guard as a witness guard transparency.
+
+As a concrete example, the following application has a function, health_records, that returns all of the health records in a database. Because health records are sensitive information, they should only be accessible by super users. The SuperUser request guard authenticates and authorizes a super user, and its FromRequest implementation is the only means by which a SuperUser can be constructed. By declaring the health_records function as follows, access control violations against health records are guaranteed to be prevented at compile-time:
+
+        fn health_records(user: &SuperUser) -> Records { /* ... */ }
+
+The reasoning is as follows:
+
+    The health_records function requires an &SuperUser type.
+    The only constructor for a SuperUser type is FromRequest.
+    Only Rocket can provide an active &Request to construct via FromRequest.
+    Thus, there must be a Request authorizing a SuperUser to call health_records.
+
+We recommend leveraging request guard transparency for all data accesses.
+
+#### Forwarding guards
+
+Request guards and forwarding are a powerful combination for enforcing policies. To illustrate, we consider how a simple authorization system might be implemented using these mechanisms.
+
+We start with two request guards:
+
+    User: A regular, authenticated user.
+
+        The FromRequest implementation for User checks that a cookie identifies a user and returns a User value if so. If no user can be authenticated, the guard forwards.
+
+    AdminUser: A user authenticated as an administrator.
+
+        The FromRequest implementation for AdminUser checks that a cookie identifies an administrative user and returns an AdminUser value if so. If no user can be authenticated, the guard forwards.
+
+We now use these two guards in combination with forwarding to implement the following three routes, each leading to an administrative control panel at /admin:
+
+        use rocket::response::Redirect;
+
+        #[get("/login")]
+        fn login() -> Template { /* .. */ }
+
+        #[get("/admin")]
+        fn admin_panel(admin: AdminUser) -> &'static str {
+            "Hello, administrator. This is the admin panel!"
+        }
+
+        #[get("/admin", rank = 2)]
+        fn admin_panel_user(user: User) -> &'static str {
+            "Sorry, you must be an administrator to access this page."
+        }
+
+        #[get("/admin", rank = 3)]
+        fn admin_panel_redirect() -> Redirect {
+            Redirect::to(uri!(login))
+        }
+
+The three routes above encode authentication and authorization. The admin_panel route only succeeds if an administrator is logged in. Only then is the admin panel displayed. If the user is not an admin, the AdminUser guard will forward. Since the admin_panel_user route is ranked next highest, it is attempted next. This route succeeds if there is any user signed in, and an authorization failure message is displayed. Finally, if a user isn't signed in, the admin_panel_redirect route is attempted. Since this route has no guards, it always succeeds. The user is redirected to a log in page.
+
+### Cookies
+
